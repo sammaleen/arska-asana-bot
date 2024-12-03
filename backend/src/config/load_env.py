@@ -11,6 +11,7 @@ portfolio_gid = os.getenv('PORTFOLIO_GID')
 
 # asana OAuth
 client_id = os.getenv("CLIENT_ID")
+client_secret = os.getenv("CLIENT_SECRET")
 redirect_uri = "http://localhost:5000/callback"
 auth_url = "https://app.asana.com/-/oauth_authorize"
 

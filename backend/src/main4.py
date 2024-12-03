@@ -20,7 +20,6 @@ redis_client = redis.Redis(host='localhost', port=6379, decode_responses=True)
 
 # dynamically generating OAuth link
 def gen_oauth_link():
-    
     state = str(uuid.uuid4())
     
     payload = {
@@ -40,12 +39,12 @@ def gen_oauth_link():
 # /connect 
 async def connect_command(update: Update, context: CallbackContext):
     
-    oauth_link, state = gen_oauth_link() # generate oauth link
-    #context.chat_data["oauth_state"] = state # store the state for validation
-    #store state in redis for exp.time 5 min
-    redis_client.setex(f'oauth_state:{update.effective_user.id}',300,state)
+    oauth_link, state = gen_oauth_link()  # generate oauth link
     
-    # send the link to the user
+    # Store the state in Redis along with user_id mapping
+    redis_client.setex(f'oauth_state:{state}', 300, update.effective_user.id)  # Store state with user ID mapping
+    
+    # Send the OAuth link to the user
     await update.message.reply_text(
         f"Connect to Asana:\n\n{oauth_link}"
     )
@@ -56,28 +55,24 @@ async def connect_command(update: Update, context: CallbackContext):
 app = Flask(__name__)
 
 @app.route('/callback', methods=['GET'])
-
-# to handle oauth callback from asana
 def callback():
-    
-    # get response from callback url
     auth_code = request.args.get('code')
     res_state = request.args.get('state')
     
-    # validate the state stored in redis
-    user_id = redis_client.get(f"state_to_user:{res_state}")
+    # Fetch the user_id associated with the state
+    user_id = redis_client.get(f'oauth_state:{res_state}')
     
-    if not user_id or redis_client.get(f"oauth_state:{user_id}") != res_state:
+    if not user_id:
         return "Invalid / Expired state", 400
-     
-    # exchange auth code for access token
+    
+    # Exchange auth code for access token
     token_url = "https://app.asana.com/-/oauth_token"
     payload = {
         "grant_type": "authorization_code",
-        "cliend_id": client_id,
+        "client_id": client_id,
         "client_secret": client_secret,
         "redirect_uri": redirect_uri,
-        "code": auth_code, 
+        "code": auth_code,
     }
     
     headers = {"Content-Type": "application/x-www-form-urlencoded"}
@@ -88,9 +83,9 @@ def callback():
         return jsonify({"message": "Authorization successful", "access_token": access_token})
     else:
         return f"Error exchanging code: {response.text}", response.status_code
-    
-    
-''''Run bot'''
+
+
+'''Run bot'''
 def main():
     # create app instance 
     application = Application.builder().token(bot_token).build()
@@ -107,7 +102,3 @@ if __name__ == "__main__":
     threading.Thread(target=lambda: app.run(port=5000, debug=True, use_reloader=False)).start()
 
     main()
-
-
-
-
