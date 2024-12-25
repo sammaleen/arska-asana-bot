@@ -9,6 +9,7 @@ from services.oauth_service import gen_oauth_link, store_state, get_user_id, get
 from services.asana_data import get_user_name
 from config.load_env import bot_token
 
+
 # set logger
 logging.basicConfig(
     format = "%(asctime)s - %(name)s - %(levelname)s  - %(message)s", level=logging.INFO
@@ -64,7 +65,7 @@ async def callback():
     user_name = get_user_name(access_token)
     
     if access_token:
-        auth_message = (f"`authorization successful`\n`user_name: {user_name}`") 
+        auth_message = (f"`auth successful`\n`user_name: {user_name}`") 
     else:
         auth_message = "`Authorization failed`"
     

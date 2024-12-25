@@ -1,6 +1,9 @@
 import requests
 import json
+import mysql.connector
+import pandas as pd
 
+# getting user name with exchanged token during authorization 
 def get_user_name(access_token):
     
     url = 'https://app.asana.com/api/1.0/users/me'
@@ -21,3 +24,6 @@ def get_user_name(access_token):
         print(f'error: {status}')
     
     return user_name
+
+
+# extracting asana data 

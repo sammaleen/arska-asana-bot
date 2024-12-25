@@ -15,8 +15,14 @@ client_secret = os.getenv("CLIENT_SECRET")
 redirect_uri = "http://localhost:5000/callback"
 auth_url = "https://app.asana.com/-/oauth_authorize"
 
-#telegram
+# telegram
 bot_token = os.getenv("BOT_TOKEN")
+
+# database 
+db_host = os.getenv("DB_HOST")
+db_user = os.getenv("DB_USER")
+db_pass = os.getenv("DB_PASS")
+database = os.getenv("DATABASE")
 
     
 
