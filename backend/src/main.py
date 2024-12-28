@@ -81,7 +81,7 @@ async def mytasks_command(update: Update, context: CallbackContext):
    
 # bot post initialization
 async def post_init(application: Application) -> None:
-    await application.bot.set_my_commands(
+    awaito application.bot.set_my_commands(
         [BotCommand('start', 'go to start message'),
          BotCommand('connect', 'connect to Asana'),
          BotCommand('mytasks', 'get list of tasks for today')]
