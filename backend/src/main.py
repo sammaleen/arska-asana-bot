@@ -6,7 +6,7 @@ import threading
 import logging
 
 from services.oauth_service import gen_oauth_link, store_state, get_user_id, get_token
-from services.asana_data import get_user_name, get_user_token
+from services.asana_data import get_user_name, get_user_token, save_asana_data
 from config.load_env import bot_token
 
 
@@ -30,13 +30,20 @@ async def start_command(update: Update, context: CallbackContext):
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     start_message = (
-        "Привет\!\n\n"
+        "*Привет*\!\n\n"
         "Бот организует связь с Асаной для получения данных по запланированным задачам\.\n\n"
-        "Для начала работы авторизуйте свой аккаунт в Асане через кнопку *Connect to Asana* ниже или с помощью команды [/connect] \\. "
-        "Все доступные команды бота находятся в *Menu* внизу и здесь, в стартовом сообщении\.\n\n"
+        
+        "*Авторизация*\n"
+        "Для начала работы авторизуйте свой аккаунт в Асане через кнопку Connect to Asana ниже или с помощью команды [/connect] \\. "
+        "Все доступные команды бота находятся в Menu внизу и здесь, в стартовом сообщении\.\n\n"
+        
         "*Команды*\n"
         "[/start] \\- вернуться к стартовому сообщению\n"
         "[/connect] \\- авторизоваться в Асане\n"
+        "[/mytasks] \\- посмотреть задачи на день\n\n"
+        
+        "*По вопросам*\n"
+        "[@sammaleen] \\- Лена"
 
     )
         
@@ -81,7 +88,7 @@ async def mytasks_command(update: Update, context: CallbackContext):
    
 # bot post initialization
 async def post_init(application: Application) -> None:
-    awaito application.bot.set_my_commands(
+    await application.bot.set_my_commands(
         [BotCommand('start', 'go to start message'),
          BotCommand('connect', 'connect to Asana'),
          BotCommand('mytasks', 'get list of tasks for today')]
@@ -117,30 +124,33 @@ async def callback():
     user_name = get_user_name(access_token)
     
     if access_token:
+        
         user_token = get_user_token(user_name)
         
         if user_token:
+            save_asana_data(user_name, user_token, user_id)
             auth_message = (f"`auth successful`\n`user_name: {user_name}`\n"
-                            "`user_token extracted`") 
+                            "`user_token: present`") 
+            
         else:
-            auth_message = (f"`auth failed`\n`user_name: {user_name} - no asana token\n`"
+            auth_message = (f"`auth successful`\n`user_name: {user_name}`\n `user_token: missing\n`"
                             "[click here to set personal token](https://docs.google.com/spreadsheets/d/1w9pbRfUU2pPqiB8oAIUs5wqPxHMjxzMcJQ6aTL0WMtM/edit?usp=sharing)")
     else:
-        auth_message = "`auth failed`\n`try to re-connect`"
+        auth_message = "`auth failed`\n`try to re-run /connect`"
     
     try:
         application_instance = app.config['application_instance']
         chat = await application_instance.bot.get_chat(user_id)
         await chat.send_message(auth_message, parse_mode="Markdown")
         
-    except Exception as e:
-        logger.error(f"error sending message to user {user_id}: {e}")
+    except Exception as err:
+        logger.error(f"error sending message to user {user_name}/{user_id}: {err}")
 
     if access_token:
-        logger.info(f"got access_token for user - {user_id}")
-        return jsonify({"message": "auth successful", "access_token": access_token})
+        logger.info(f"got access_token for user - {user_name}/{user_id}")
+        return jsonify({"message": "auth successful", "user_name": user_name})
     else:
-        logger.error(f"error exchanging code for user - {user_id}")
+        logger.error(f"error exchanging code for user - {user_name}/{user_id}")
         return "error exchanging code", 400
     
 

@@ -1,10 +1,12 @@
 import requests
-import json
 import mysql.connector
 import pandas as pd
-import datetime
+from datetime import date
 
 from config.load_env import db_user, db_host, db_pass, database
+
+import logging
+logger = logging.getLogger(__name__)
 
 
 # GET USER NAME getting user name with exchanged token during authorization 
@@ -119,7 +121,8 @@ def get_user_token(user_name):
     
     conn = mysql.connector.connect(user = db_user,
                                password = db_pass,
-                               host = db_host,
+                               #host = db_host,
+                               host='127.0.0.1',
                                database = database)
     
     cursor = conn.cursor(dictionary=True)
@@ -137,6 +140,41 @@ def get_user_token(user_name):
     else:
         return None
     
-# SAVE ASANA data to db - bot
-#def save_asana_data(user_name, user_token, tg_user_id):
+    
+# SAVE EXTRACTED ASANA data to table 'bot'
+def save_asana_data(user_name, user_token, user_id):
+    
+    try:
+        conn = mysql.connector.connect(
+            user=db_user,
+            password=db_pass,
+            #host = db_host,
+            host='127.0.0.1',
+            database=database
+        )
+        cursor = conn.cursor()
+        
+        cursor.execute(
+            """
+            INSERT INTO bot (user_id, user_name, user_token, date_added)
+            VALUES (%s, %s, %s, %s)
+            ON DUPLICATE KEY UPDATE
+            user_token = VALUES(user_token), date_added = VALUES(date_added)
+            """,
+            (user_id, user_name, user_token, date.today())
+        )
+        conn.commit()
+        logger.info(f"asana data saved for {user_name} / {user_id}")
+        return True
+    
+    except mysql.connector.Error as err:
+        logger.error(f"DB error: {err}")
+        return False
+    
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
+    
     
