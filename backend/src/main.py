@@ -6,7 +6,7 @@ import threading
 import logging
 
 from services.oauth_service import gen_oauth_link, store_state, get_user_id, get_token
-from services.asana_data import get_user_name, get_user_token, save_asana_data
+from services.asana_data import get_user_name, get_user_token, save_asana_data, get_cached_token
 from config.load_env import bot_token
 
 
@@ -119,24 +119,65 @@ async def callback():
         return "Invalid / Expired state", 400
     
     logger.info(f"valid state for user - {user_id}")
+     
+    access_token = get_token(auth_code) # exchange auth code for access token
     
-    access_token = get_token(auth_code) # Exchange auth code for access token
-    user_name = get_user_name(access_token)
-    
-    if access_token:
-        
-        user_token = get_user_token(user_name)
-        
-        if user_token:
-            save_asana_data(user_name, user_token, user_id)
-            auth_message = (f"`auth successful`\n`user_name: {user_name}`\n"
-                            "`user_token: present`") 
-            
-        else:
-            auth_message = (f"`auth successful`\n`user_name: {user_name}`\n `user_token: missing\n`"
-                            "[click here to set personal token](https://docs.google.com/spreadsheets/d/1w9pbRfUU2pPqiB8oAIUs5wqPxHMjxzMcJQ6aTL0WMtM/edit?usp=sharing)")
-    else:
+    if not access_token:
+        logger.error(f"failed exchange auth code for token for user: {user_id}")
         auth_message = "`auth failed`\n`try to re-run /connect`"
+        
+    user_name = get_user_name(access_token)  
+    
+    if not user_name:
+        logger.error(f"failed to get user name for user: {user_id}")
+        auth_message = "`auth failed`\n`try to re-run /connect`"
+    
+    user_token = get_user_token(user_name)
+    
+    if not user_token:
+        logger.error(f"failed to get permanent token from db for user: {user_name}/{user_id}")
+        auth_message = (
+            "`auth successful`\n"
+            f"`user_name: {user_name}`\n"
+            "`user_token: missing\n`"
+            "[click here to set personal token](https://docs.google.com/spreadsheets/d/1w9pbRfUU2pPqiB8oAIUs5wqPxHMjxzMcJQ6aTL0WMtM/edit?usp=sharing)"
+            )
+        
+        try:
+            application_instance = app.config['application_instance']
+            chat = await application_instance.bot.get_chat(user_id)
+            await chat.send_message(auth_message, parse_mode="Markdown")
+            
+        except Exception as err:
+            logger.error(f"error sending message to user: {user_name}/{user_id}: {err}")
+        
+        return jsonify({"message": "auth successful", "user_token": "missing"}), 400
+    
+    token_saved = save_asana_data(user_name, user_token, user_id)
+    
+    if not token_saved:
+        logger.error(f"Failed to save token for user: {user_name}/{user_id}")
+        auth_message = (
+            "`auth successful`\n"
+            f"`user_name: {user_name}`\n"
+            "`user_token: present, NOT saved"
+        )
+        try:
+            application_instance = app.config['application_instance']
+            chat = await application_instance.bot.get_chat(user_id)
+            await chat.send_message(auth_message, parse_mode="Markdown")
+            
+        except Exception as err:
+            logger.error(f"error sending message to user: {user_name}/{user_id}: {err}")
+            
+        return jsonify({"message": "auth failed"}), 500
+    
+    # full success, token present and saved
+    auth_message = (
+        "`auth successful`\n"
+        f"`user_name: {user_name}`\n"
+        "`user_token: present, saved`"
+    )
     
     try:
         application_instance = app.config['application_instance']
@@ -144,14 +185,11 @@ async def callback():
         await chat.send_message(auth_message, parse_mode="Markdown")
         
     except Exception as err:
-        logger.error(f"error sending message to user {user_name}/{user_id}: {err}")
+        logger.error(f"error sending message to user: {user_name}/{user_id}: {err}")
 
-    if access_token:
-        logger.info(f"got access_token for user - {user_name}/{user_id}")
-        return jsonify({"message": "auth successful", "user_name": user_name})
-    else:
-        logger.error(f"error exchanging code for user - {user_name}/{user_id}")
-        return "error exchanging code", 400
+    logger.info(f"token saved for user: {user_name}/{user_id}")
+    return jsonify({"message": "auth successful", "user_name": user_name, "user_token": "present, saved"})
+    
     
 
 # run flask app in a separate thread to handle OAuth callback
@@ -179,5 +217,4 @@ def main():
 
 if __name__ == "__main__":
     main() 
-    
     

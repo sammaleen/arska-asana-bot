@@ -3,7 +3,10 @@ import mysql.connector
 import pandas as pd
 from datetime import date
 
-from config.load_env import db_user, db_host, db_pass, database
+from config.load_env import db_user, db_host, db_pass, database, token_ttl
+
+import redis
+redis_client = redis.Redis(host='localhost', port=6379, decode_responses=True)
 
 import logging
 logger = logging.getLogger(__name__)
@@ -129,7 +132,6 @@ def get_user_token(user_name):
     
     cursor.execute("SELECT user_token FROM users WHERE name = %s", 
                    (user_name,))
-    
     result = cursor.fetchone()
     
     cursor.close()
@@ -145,6 +147,9 @@ def get_user_token(user_name):
 def save_asana_data(user_name, user_token, user_id):
     
     try:
+        redis_key = f"user_token:{user_id}"
+        redis_client.set(redis_key, user_token, ex=token_ttl)
+        
         conn = mysql.connector.connect(
             user=db_user,
             password=db_pass,
@@ -164,7 +169,8 @@ def save_asana_data(user_name, user_token, user_id):
             (user_id, user_name, user_token, date.today())
         )
         conn.commit()
-        logger.info(f"asana data saved for {user_name} / {user_id}")
+        
+        logger.info(f"asana data saved for {user_name}/{user_id}")
         return True
     
     except mysql.connector.Error as err:
@@ -178,3 +184,49 @@ def save_asana_data(user_name, user_token, user_id):
             conn.close()
     
     
+# GET TOKEN FROM CACHE
+def get_cached_token(user_id):
+    
+    try:
+        redis_key = f"user_token:{user_id}"
+        
+        # check redis cache for token
+        user_token = redis_client.get(redis_key)
+        
+        if user_token:
+            logger.info(f"token retrieved from redis cache for user: {user_id}")
+            return user_token
+        
+        # fallback to db 'bot' table
+        conn = mysql.connector.connect(
+            user=db_user,
+            password=db_pass,
+            #host = db_host,
+            host='127.0.0.1',
+            database=database
+        )
+        cursor = conn.cursor(dictionary=True)
+        
+        cursor.execute("SELECT user_token FROM bot WHERE user_id = %s",
+                       (user_id,))
+        result = cursor.fetchone()
+        
+        if result:
+            user_token = result['user_token']
+            
+            # update redis cache
+            redis_client.set(redis_key, user_token, ex=token_ttl)
+            logger.info(f"token retrieved from db and cached in redis for user: {user_id}")
+            return user_token
+        
+        return None 
+        
+    except mysql.connector.Error as err:
+        logger.error(f"DB error: {err}")
+        return None
+    
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
