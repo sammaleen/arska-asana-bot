@@ -1,12 +1,15 @@
 import requests
+import json
 import mysql.connector
 import pandas as pd
 from datetime import date
+from datetime import datetime
+
 
 from config.load_env import db_user, db_host, db_pass, database, token_ttl
 
-import redis
-redis_client = redis.Redis(host='localhost', port=6379, decode_responses=True)
+from services.redis_client import get_redis_client
+redis_client = get_redis_client()
 
 import logging
 logger = logging.getLogger(__name__)
@@ -34,13 +37,180 @@ def get_user_name(access_token):
     
     return user_name
 
-
-# GET TASKS / extracting today tasks for a user
-def get_tasks(access_token, user_gid, workspace_gid):
+        
+# GET PERSONAL TOKEN AND GID from db 'users'
+def get_user_data(user_name):
     
-    # get user's mytasks list gid
+    conn = mysql.connector.connect(user = db_user,
+                               password = db_pass,
+                               #host = db_host,
+                               host='127.0.0.1',
+                               database = database)
+    
+    cursor = conn.cursor(dictionary=True)
+    
+    cursor.execute("SELECT user_gid, user_token FROM users WHERE name = %s", 
+                   (user_name,))
+    result = cursor.fetchone()
+    
+    cursor.close()
+    conn.close()
+    
+    if result:
+        return result.get('user_gid'), result.get('user_token')
+    else:
+        return None, None
+    
+    
+# SAVE EXTRACTED ASANA data to redis cache and table 'bot'
+def save_asana_data(user_name, user_gid, user_token, user_id):
+    
+    try:
+        redis_key = f"user_data:{user_id}"
+        redis_data = {"user_gid": user_gid, "user_name": user_name, "user_token": user_token}
+        redis_client.set(redis_key, json.dumps(redis_data), ex=token_ttl)
+        
+        conn = mysql.connector.connect(
+            user=db_user,
+            password=db_pass,
+            #host = db_host,
+            host='127.0.0.1',
+            database=database
+        )
+        cursor = conn.cursor()
+        
+        cursor.execute(
+            """
+            INSERT INTO bot (user_id, user_gid, user_name, user_token, date_added)
+            VALUES (%s, %s, %s, %s, %s)
+            ON DUPLICATE KEY UPDATE
+            user_token = VALUES(user_token), date_added = VALUES(date_added)
+            """,
+            (user_id, user_name, user_token, user_gid, date.today())
+        )
+        conn.commit()
+        
+        logger.info(f"asana data saved for {user_name}/{user_id}")
+        return True
+    
+    except mysql.connector.Error as err:
+        logger.error(f"DB error: {err}")
+        return False
+    
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
+    
+    
+# GET REDIS DATA FROM CACHE
+def get_redis_data(user_id):
+    
+    cursor = None
+    conn = None
+    
+    try:
+        redis_key = f"user_data:{user_id}"
+        cached_data = redis_client.get(redis_key)  # check redis cache for token
+        
+        if cached_data:
+            user_data = json.loads(cached_data)
+            
+            user_gid = user_data.get('user_gid')
+            user_name = user_data.get('user_name')
+            user_token = user_data.get('user_token')
+            
+            logger.info(f"user data retrieved from Redis cache for user: {user_id}")
+            return user_gid, user_name, user_token
+        
+        # fallback to db 'bot' table
+        conn = mysql.connector.connect(
+            user=db_user,
+            password=db_pass,
+            #host = db_host,
+            host='127.0.0.1',
+            database=database
+        )
+        cursor = conn.cursor(dictionary=True)
+        
+        cursor.execute("SELECT user_gid, user_name, user_token FROM bot WHERE user_id = %s",
+                       (user_id,))
+        result = cursor.fetchone()
+        
+        if result:
+            user_gid = result['user_gid']
+            user_name = result['user_name']
+            user_token = result['user_token']
+            
+            # update redis cache
+            redis_data = {"user_gid": user_gid, "user_name": user_name, "user_token": user_token}
+            redis_client.set(redis_key, json.dumps(redis_data), ex=token_ttl)
+            logger.info(f"user data retrieved from DB and cached in Redis for user: {user_id}")
+            return user_gid, user_name, user_token
+        
+        return None, None, None
+        
+    except mysql.connector.Error as err:
+        logger.error(f"DB error: {err}")
+        return None, None, None
+    
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
+              
+              
+# GET TASKS FROM DB + CHECK NOTES for additions
+def get_tasks_db(user_name):
+    
+    try:
+        conn = mysql.connector.connect(
+        user=db_user,
+        password=db_pass,
+        #host = db_host,
+        host='127.0.0.1',
+        database=database
+        )
+        
+        # tasks
+        tasks_query = """
+        SELECT project_name, task_name,due_on, notes, url
+        FROM tasks 
+        WHERE user_name = %s AND date_extracted = %s
+        """
+        params = (user_name, date.today())
+        tasks_df = pd.read_sql(tasks_query, conn, params=params)
+                
+        # notes
+        notes_query = """
+        SELECT note
+        FROM notes
+        WHERE user_name = %s AND date_added = %s
+        """
+        params = (user_name, date.today())
+        notes_df = pd.read_sql(notes_query, conn, params=params)
+
+        return tasks_df, notes_df
+        
+    except mysql.connector.Error as err:
+        logger.error(f"DB error: {err}")
+        return None, None
+    
+    finally:
+        if conn:
+            conn.close()
+        
+        
+# GET TASKS FROM ASANA + CHECK NOTES FROM DB / extracting tasks for a user from today/сегодня section of mytask list
+def get_tasks(user_id, workspace_gid):
+    
+    user_gid, user_name, user_token = get_redis_data(user_id)
+    
+    #get list gid for my tasks board
     url = f"https://app.asana.com/api/1.0/users/{user_gid}/user_task_list"
-    headers = {'Authorization': f'Bearer {access_token}'}
+    headers = {'Authorization': f'Bearer {user_token}'}
     
     payload = {
         'workspace': workspace_gid,
@@ -65,12 +235,12 @@ def get_tasks(access_token, user_gid, workspace_gid):
     
     payload = {
         'completed_since': 'now',
-        'opt_fields': 'name, created_at, due_on, start_on, projects, projects.name, section.name, notes, assignee_section.name, created_by.name, created_by.gid, permalink_url',
+        'opt_fields': 'name, due_on, projects, projects.name, section.name, notes, assignee_section.name, permalink_url',
         'limit': 100,
         'opt_pretty': True  
         }
     
-     # pagination
+    # pagination
     while True:
         response = requests.get(url, headers=headers, params=payload)
         
@@ -106,10 +276,9 @@ def get_tasks(access_token, user_gid, workspace_gid):
                 lambda x: x[0]['name'] if isinstance(x, list) and x else '')
         
         #re-order columns
-        order = ['task_gid','project_name','task_name',
-                    'start_on','due_on','notes',
-                    'created_at','url','created_by.gid',
-                    'created_by.name','assignee_section.gid','assignee_section.name']
+        my_tasks_df.drop('task_gid', axis=1, inplace=True)
+        my_tasks_df['idx'] = (my_tasks_df.index + 1).tolist()  
+        order = ['idx','project_name','task_name','due_on','notes','url']
         
         my_tasks_df = my_tasks_df[order]
         
@@ -118,38 +287,49 @@ def get_tasks(access_token, user_gid, workspace_gid):
         
     return my_tasks_df
 
+
+# FORMAT mytasks message
+
+def format_df(df):
+    
+    current_date = datetime.now().strftime("%d %b %Y - %a")
+    message = f"*{current_date}*\n\n"
+
+    pr_project = None
+    
+    for idx, row in df.iterrows():
         
-# GET PERSONAL TOKEN from db - users
-def get_user_token(user_name):
+        project = row['project_name'] if row['project_name'] else '[No project]'
+        
+        if project != pr_project:
+            if pr_project is not None:
+                message += "\n"
+            message += f"*{project}*\n"
+            pr_project = project
+            
+        task = row['task_name']
+        url = row['url']
+        notes = row['notes'] if row['notes'] else '-'
+        due = row['due_on'] if row['due_on'] else '[No DL]'
+        
+        message += f"{idx + 1}. [{task}]({url}) - `{due}`\n"
+        message += f"{notes}\n\n"
+        
+    return message
+
+        
+        
+        
     
-    conn = mysql.connector.connect(user = db_user,
-                               password = db_pass,
-                               #host = db_host,
-                               host='127.0.0.1',
-                               database = database)
+
+
+
+# ADD NOTE to DB 'notes'
+def add_note(note, user_id):
     
-    cursor = conn.cursor(dictionary=True)
-    
-    cursor.execute("SELECT user_token FROM users WHERE name = %s", 
-                   (user_name,))
-    result = cursor.fetchone()
-    
-    cursor.close()
-    conn.close()
-    
-    if result:
-        return result['user_token']
-    else:
-        return None
-    
-    
-# SAVE EXTRACTED ASANA data to table 'bot'
-def save_asana_data(user_name, user_token, user_id):
+    user_gid, user_name, user_token = get_redis_data(user_id)
     
     try:
-        redis_key = f"user_token:{user_id}"
-        redis_client.set(redis_key, user_token, ex=token_ttl)
-        
         conn = mysql.connector.connect(
             user=db_user,
             password=db_pass,
@@ -160,71 +340,20 @@ def save_asana_data(user_name, user_token, user_id):
         cursor = conn.cursor()
         
         cursor.execute(
-            """
-            INSERT INTO bot (user_id, user_name, user_token, date_added)
-            VALUES (%s, %s, %s, %s)
+            """INSERT INTO notes (user_name, note, date_added)
+            VALUES (%s, %s, %s)
             ON DUPLICATE KEY UPDATE
-            user_token = VALUES(user_token), date_added = VALUES(date_added)
+            note = VALUES(note), date_added = VALUES(date_added)
             """,
-            (user_id, user_name, user_token, date.today())
+            (user_name, note, date.today())
         )
         conn.commit()
         
-        logger.info(f"asana data saved for {user_name}/{user_id}")
-        return True
-    
-    except mysql.connector.Error as err:
-        logger.error(f"DB error: {err}")
-        return False
-    
-    finally:
-        if cursor:
-            cursor.close()
-        if conn:
-            conn.close()
-    
-    
-# GET TOKEN FROM CACHE
-def get_cached_token(user_id):
-    
-    try:
-        redis_key = f"user_token:{user_id}"
-        
-        # check redis cache for token
-        user_token = redis_client.get(redis_key)
-        
-        if user_token:
-            logger.info(f"token retrieved from redis cache for user: {user_id}")
-            return user_token
-        
-        # fallback to db 'bot' table
-        conn = mysql.connector.connect(
-            user=db_user,
-            password=db_pass,
-            #host = db_host,
-            host='127.0.0.1',
-            database=database
-        )
-        cursor = conn.cursor(dictionary=True)
-        
-        cursor.execute("SELECT user_token FROM bot WHERE user_id = %s",
-                       (user_id,))
-        result = cursor.fetchone()
-        
-        if result:
-            user_token = result['user_token']
-            
-            # update redis cache
-            redis_client.set(redis_key, user_token, ex=token_ttl)
-            logger.info(f"token retrieved from db and cached in redis for user: {user_id}")
-            return user_token
-        
-        return None 
+        logger.info(f"note saved for {user_name}")
         
     except mysql.connector.Error as err:
         logger.error(f"DB error: {err}")
-        return None
-    
+        
     finally:
         if cursor:
             cursor.close()

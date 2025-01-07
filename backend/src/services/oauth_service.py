@@ -2,11 +2,11 @@ import redis
 import uuid
 import urllib.parse
 import requests
+
 from config.load_env import client_id, client_secret, redirect_uri, auth_url
 
-
-# redis client
-redis_client = redis.Redis(host='localhost', port=6379, decode_responses=True)
+from services.redis_client import get_redis_client
+redis_client = get_redis_client()
 
 # dynamically generate oauth link
 def gen_oauth_link():
@@ -19,9 +19,9 @@ def gen_oauth_link():
         "state": state,
     }
 
-    oauth_url = f"{auth_url}?{urllib.parse.urlencode(payload)}"
+    oauth_link = f"{auth_url}?{urllib.parse.urlencode(payload)}"
     
-    return oauth_url, state
+    return oauth_link, state
 
 # store state in redis for 5 mins
 def store_state(user_id, state):

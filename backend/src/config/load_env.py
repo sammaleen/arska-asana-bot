@@ -25,6 +25,8 @@ db_pass = os.getenv("DB_PASS")
 database = os.getenv("DATABASE")
 
 # redis
+rd_host = 'localhost'
+rd_port = 6379
 token_ttl = 518400 # store cache for 6 days
     
 
