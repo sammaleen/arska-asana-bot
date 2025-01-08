@@ -5,14 +5,13 @@ import pandas as pd
 from datetime import date
 from datetime import datetime
 
-
 from config.load_env import db_user, db_host, db_pass, database, token_ttl
-
-from services.redis_client import get_redis_client
-redis_client = get_redis_client()
 
 import logging
 logger = logging.getLogger(__name__)
+
+from services.redis_client import get_redis_client
+redis_client = get_redis_client()
 
 
 # GET USER NAME getting user name with exchanged token during authorization 
@@ -290,42 +289,87 @@ def get_tasks(user_id, workspace_gid):
 
 # FORMAT mytasks message
 
-def format_df(df):
+def format_df(df, extra_note, max_len=None, max_note_len=None):
     
     current_date = datetime.now().strftime("%d %b %Y - %a")
     message = f"*{current_date}*\n\n"
-
-    pr_project = None
     
-    for idx, row in df.iterrows():
+    grouped_tasks = df.groupby('project_name') # group tasks by project
+    
+    for project, group in grouped_tasks:
+        message += f"*{project if project else 'No project'}*\n"
         
-        project = row['project_name'] if row['project_name'] else '[No project]'
-        
-        if project != pr_project:
-            if pr_project is not None:
-                message += "\n"
-            message += f"*{project}*\n"
-            pr_project = project
-            
-        task = row['task_name']
-        url = row['url']
-        notes = row['notes'] if row['notes'] else '-'
-        due = row['due_on'] if row['due_on'] else '[No DL]'
-        
-        message += f"{idx + 1}. [{task}]({url}) - `{due}`\n"
-        message += f"{notes}\n\n"
+        # reset idx, enumerate from 1
+        for idx, row in enumerate(group.itertuples(), start=1):
+            task = row.task_name
+            url = row.url
+            notes = row.notes if row.notes else '-'
+            due = row.due_on if row.due_on else 'No DL'
+
+            # crop notes if exceed max_note_len
+            if len(notes) > max_note_len:
+                notes = notes[:max_note_len - 3].rstrip() + " (...)"
+
+            task_entry = f"{idx}. [{task}]({url}) - `{due}`\n {notes}\n\n"
+            message += task_entry
+
+        message += "\n" 
+
+    if max_len and len(message) > max_len:
+        message = message[:max_len].rstrip() + " (...)"
+
+    if extra_note:
+        if len(extra_note) > max_note_len:
+            extra_note = extra_note[:max_note_len - 3].rstrip() + " (...)"
+        message += "\n" 
+        message += f"*✲Note:*\n{extra_note}\n\n"
         
     return message
 
+
+# CHECK NOTES from 'notes' bd
+def get_note(user_id):
+    
+    user_gid, user_name, user_token = get_redis_data(user_id)
+    
+    try:
+        conn = mysql.connector.connect(
+            user=db_user,
+            password=db_pass,
+            #host = db_host,
+            host='127.0.0.1',
+            database=database
+        )
+        cursor = conn.cursor(dictionary=True)
         
+        cursor.execute(
+            """
+            SELECT note
+            FROM notes
+            WHERE user_name = %s AND date_added = %s
+            """,
+            (user_name, date.today())
+        )
         
+        result = cursor.fetchone()
+        if result:
+            extra_note = result['note']
+            return extra_note
+        return None
         
+    except mysql.connector.Error as err:
+        logger.error(f"DB error: {err}")
+        return None
+    
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
     
 
-
-
 # ADD NOTE to DB 'notes'
-def add_note(note, user_id):
+def store_note(note, user_id):
     
     user_gid, user_name, user_token = get_redis_data(user_id)
     
@@ -350,9 +394,11 @@ def add_note(note, user_id):
         conn.commit()
         
         logger.info(f"note saved for {user_name}")
+        return True
         
     except mysql.connector.Error as err:
         logger.error(f"DB error: {err}")
+        return False
         
     finally:
         if cursor:
