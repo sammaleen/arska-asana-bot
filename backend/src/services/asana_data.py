@@ -97,9 +97,9 @@ def save_asana_data(user_name, user_gid, user_token, user_id):
         return False
     
     finally:
-        if cursor:
+        if cursor is not None:
             cursor.close()
-        if conn:
+        if conn is not None:
             conn.close()
     
     
@@ -155,9 +155,9 @@ def get_redis_data(user_id):
         return None, None, None
     
     finally:
-        if cursor:
+        if cursor is not None:
             cursor.close()
-        if conn:
+        if conn is not None:
             conn.close()
               
               
@@ -198,7 +198,7 @@ def get_tasks_db(user_name):
         return None, None
     
     finally:
-        if conn:
+        if conn is not None:
             conn.close()
         
         
@@ -310,7 +310,7 @@ def format_df(df, extra_note, max_len=None, max_note_len=None):
             if len(notes) > max_note_len:
                 notes = notes[:max_note_len - 3].rstrip() + " (...)"
 
-            task_entry = f"{idx}. [{task}]({url}) - `{due}`\n {notes}\n\n"
+            task_entry = f"{idx}. [{task}]({url}) - `{due}`\n{notes}\n"
             message += task_entry
 
         message += "\n" 
@@ -321,7 +321,7 @@ def format_df(df, extra_note, max_len=None, max_note_len=None):
     if extra_note:
         if len(extra_note) > max_note_len:
             extra_note = extra_note[:max_note_len - 3].rstrip() + " (...)"
-        message += "\n" 
+        #message += "\n" 
         message += f"*✲Note:*\n{extra_note}\n\n"
         
     return message
@@ -362,9 +362,9 @@ def get_note(user_id):
         return None
     
     finally:
-        if cursor:
+        if cursor is not None:
             cursor.close()
-        if conn:
+        if conn is not None:
             conn.close()
     
 
@@ -393,7 +393,7 @@ def store_note(note, user_id):
         )
         conn.commit()
         
-        logger.info(f"note saved for {user_name}")
+        logger.info(f"note saved for: {user_id}/{user_name}")
         return True
         
     except mysql.connector.Error as err:
@@ -401,7 +401,7 @@ def store_note(note, user_id):
         return False
         
     finally:
-        if cursor:
+        if cursor is not None:
             cursor.close()
-        if conn:
+        if conn is not None:
             conn.close()

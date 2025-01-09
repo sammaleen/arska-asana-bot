@@ -1,5 +1,5 @@
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand
-from telegram.ext import Application, CommandHandler, CallbackContext, CallbackQueryHandler
+from telegram.ext import Application, CommandHandler, CallbackContext, CallbackQueryHandler, MessageHandler, filters
 from prettytable import PrettyTable
 
 import pandas as pd
@@ -13,7 +13,7 @@ from services.oauth_service import gen_oauth_link, store_state, get_user_id, get
 from services.asana_data import get_user_name, get_user_data, save_asana_data, get_redis_data, get_tasks, get_note, format_df, store_note
 from services.redis_client import get_redis_client
 
-from config.load_env import bot_token, workspace_gid
+from config.load_env import bot_token, workspace_gid, gs_url
 
 
 # set logger and flask
@@ -111,7 +111,7 @@ async def mytasks_command(update: Update, context: CallbackContext):
     extra_note = get_note(user_id)
     
     if not df.empty: 
-        mytasks_message = format_df(df, extra_note, max_len=4000, max_note_len=100)
+        mytasks_message = format_df(df, extra_note, max_len=4000, max_note_len=150)
     else:
         mytasks_message = (
             f"*{datetime.now().strftime('%d %b %Y - %a')}*\n\n"
@@ -131,6 +131,7 @@ async def mytasks_command(update: Update, context: CallbackContext):
 # add notes callback
 
 note_input_state = {}
+
 async def add_notes_callback(update: Update, context: CallbackContext):
    query = update.callback_query
    await query.answer()
@@ -150,38 +151,43 @@ async def add_notes_callback(update: Update, context: CallbackContext):
 
   
 # handle user response 
-async def note_input_handler(update: Update, context: CallbackContext):
+async def note_input(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
+    chat_id = note_input_state.get(user_id, {}).get("chat_id")
     
-    if user_id in note_input_state:
-        chat_id = note_input_state[user_id]["chat_id"]
-        note_text = update.effective_message.text
-        note_input_state[user_id]["note"] = note_text
-        
-        logger.info(f"{user_id} entered note: {note_text}")
-        
-        keyboard = [
-            [
-                InlineKeyboardButton("Save 💾", callback_data="confirm_note"),
-                InlineKeyboardButton("Re-write ✍", callback_data="edit_note"),
+    if chat_id:
+        if update.effective_message:  # Handling text input
+            note_text = update.effective_message.text
+            note_input_state[user_id]["note"] = note_text
+            
+            logger.info(f"add notes button used by: {user_id}")
+            
+            keyboard = [
+                [
+                    InlineKeyboardButton("Save 💾", callback_data="confirm_note"),
+                    InlineKeyboardButton("Re-write ✍", callback_data="edit_note"),
+                ]
             ]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
+            reply_markup = InlineKeyboardMarkup(keyboard)
 
-        try:
-            await context.bot.send_message(
-                chat_id=chat_id,
-                text=f"Ваша заметка:\n\n\"{note_text}\"\n\n Пожалуйста, подтвердите сохранение или напишите заново",
-                reply_markup=reply_markup
-            )
-            logger.info(f"Sent message to chat ID: {chat_id} with note text.")
-        except Exception as e:
-            logger.error(f"Error while sending message to chat {chat_id}: {e}")
+            try:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=f"Ваша заметка:\n\n*{note_text}*\n\nПодтвердите сохранение или перепишите заметку",
+                    reply_markup=reply_markup,
+                    parse_mode="Markdown"
+                )
+                logger.info(f"note '{note_text}' sent to user {user_id} for confirmation")
+            except Exception as err:
+                logger.error(f"error while sending message to chat {chat_id}: {err}")
+        else:
+            await update.message.reply_text("To add notes use '/mytasks' command -> 'Add notes' button")
+            logger.info("User tried to add notes without initiating from the correct button.")
     else:
         await update.message.reply_text("To add notes use '/mytasks' command -> 'Add notes' button")
         logger.info("User tried to add notes without initiating from the correct button.")
 
-
+        
 # handle note saving/rewriting 
 async def process_note(update: Update, context: CallbackContext):
     query = update.callback_query
@@ -190,7 +196,7 @@ async def process_note(update: Update, context: CallbackContext):
     if user_id in note_input_state:
         data = query.data
         chat_id = note_input_state[user_id]["chat_id"]
-        note = note_input_state[user_id]["note"]
+        note = note_input_state[user_id].get("note")
         
         logger.info(f"{user_id} clicked button {data}")
 
@@ -213,13 +219,13 @@ async def process_note(update: Update, context: CallbackContext):
             del note_input_state[user_id]  # clear state
             
         # re-write note
-        elif data == "edit_note":  
+        elif data == "edit_note": 
+            note_input_state[user_id]["status"] = "awaiting_new_note"  
+            note_input_state[user_id]["note"] = None  
             await context.bot.send_message(
                 chat_id=chat_id,
-                text="Пожалуйста, напишите вашу обновленную заметку",
-                parse_mode="Markdown"
+                text="Напишите обновленную заметку"
             )
-            note_input_state[user_id]["note"] = None 
     else:
         await query.answer("Use command '/mytasks' again")
 
@@ -242,7 +248,6 @@ async def post_init(application: Application) -> None:
 
 
 # OAuth callback route
-
 @app.route('/callback', methods=['GET'])
 
 async def callback():
@@ -278,7 +283,7 @@ async def callback():
             "`auth successful`\n"
             f"`user_name: {user_name}`\n"
             "`user_token: missing\n`"
-            "[click here to set personal token](https://docs.google.com/spreadsheets/d/1w9pbRfUU2pPqiB8oAIUs5wqPxHMjxzMcJQ6aTL0WMtM/edit?usp=sharing)"
+            f"[click here to set personal token]({gs_url})"
             )
         
         try:
@@ -347,9 +352,10 @@ def main():
     application.add_handler(CommandHandler("mytasks", mytasks_command)) 
     
     # callback handlers
-    application.add_handler(CallbackQueryHandler(add_notes_callback))
-    application.add_handler(CallbackQueryHandler(note_input_handler))
-    application.add_handler(CallbackQueryHandler(process_note))
+    application.add_handler(CallbackQueryHandler(add_notes_callback, pattern="add_notes"))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, note_input))
+    application.add_handler(CallbackQueryHandler(process_note, pattern="^(confirm_note|edit_note)$"))
+    
     
     # start flask app in a separate thread
     flask_thread = threading.Thread(target=start_flask_app, args=(application,))
@@ -357,7 +363,6 @@ def main():
 
     # start bot
     application.run_polling()
-
 
 if __name__ == "__main__":
     main() 
