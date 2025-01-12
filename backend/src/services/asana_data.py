@@ -61,12 +61,12 @@ def get_user_data(user_name):
         return None, None
     
     
-# SAVE EXTRACTED ASANA data to redis cache and table 'bot'
-def save_asana_data(user_name, user_gid, user_token, user_id):
+# SAVE EXTRACTED TG and ASANA data to redis cache and table 'bot'
+def save_asana_data(user_name, user_gid, user_token, user_id, tg_user):
     
     try:
         redis_key = f"user_data:{user_id}"
-        redis_data = {"user_gid": user_gid, "user_name": user_name, "user_token": user_token}
+        redis_data = {"user_gid": user_gid, "tg_user": tg_user, "user_name": user_name, "user_token": user_token}
         redis_client.set(redis_key, json.dumps(redis_data), ex=token_ttl)
         
         conn = mysql.connector.connect(
@@ -80,12 +80,12 @@ def save_asana_data(user_name, user_gid, user_token, user_id):
         
         cursor.execute(
             """
-            INSERT INTO bot (user_id, user_gid, user_name, user_token, date_added)
-            VALUES (%s, %s, %s, %s, %s)
+            INSERT INTO bot (user_id, tg_user, user_name, user_token, user_gid, date_added)
+            VALUES (%s, %s, %s, %s, %s, %s)
             ON DUPLICATE KEY UPDATE
-            user_token = VALUES(user_token), date_added = VALUES(date_added)
+            tg_user = VALUES(tg_user), user_name = VALUES(user_name), user_token = VALUES(user_token), date_added = VALUES(date_added)
             """,
-            (user_id, user_name, user_token, user_gid, date.today())
+            (user_id, tg_user, user_name, user_token, user_gid, date.today())
         )
         conn.commit()
         
@@ -119,9 +119,10 @@ def get_redis_data(user_id):
             user_gid = user_data.get('user_gid')
             user_name = user_data.get('user_name')
             user_token = user_data.get('user_token')
+            tg_user = user_data.get('tg_user')
             
             logger.info(f"user data retrieved from Redis cache for user: {user_id}")
-            return user_gid, user_name, user_token
+            return user_gid, user_name, user_token, tg_user
         
         # fallback to db 'bot' table
         conn = mysql.connector.connect(
@@ -133,7 +134,7 @@ def get_redis_data(user_id):
         )
         cursor = conn.cursor(dictionary=True)
         
-        cursor.execute("SELECT user_gid, user_name, user_token FROM bot WHERE user_id = %s",
+        cursor.execute("SELECT tg_user, user_name, user_token, user_gid FROM bot WHERE user_id = %s",
                        (user_id,))
         result = cursor.fetchone()
         
@@ -141,18 +142,19 @@ def get_redis_data(user_id):
             user_gid = result['user_gid']
             user_name = result['user_name']
             user_token = result['user_token']
+            tg_user = result['tg_user']
             
             # update redis cache
-            redis_data = {"user_gid": user_gid, "user_name": user_name, "user_token": user_token}
+            redis_data = {"user_gid": user_gid, "tg_user": tg_user, "user_name": user_name, "user_token": user_token}
             redis_client.set(redis_key, json.dumps(redis_data), ex=token_ttl)
             logger.info(f"user data retrieved from DB and cached in Redis for user: {user_id}")
-            return user_gid, user_name, user_token
+            return user_gid, user_name, user_token, tg_user
         
-        return None, None, None
+        return None, None, None, None
         
     except mysql.connector.Error as err:
         logger.error(f"DB error: {err}")
-        return None, None, None
+        return None, None, None, None
     
     finally:
         if cursor is not None:
@@ -161,51 +163,10 @@ def get_redis_data(user_id):
             conn.close()
               
               
-# GET TASKS FROM DB + CHECK NOTES for additions
-def get_tasks_db(user_name):
-    
-    try:
-        conn = mysql.connector.connect(
-        user=db_user,
-        password=db_pass,
-        #host = db_host,
-        host='127.0.0.1',
-        database=database
-        )
-        
-        # tasks
-        tasks_query = """
-        SELECT project_name, task_name,due_on, notes, url
-        FROM tasks 
-        WHERE user_name = %s AND date_extracted = %s
-        """
-        params = (user_name, date.today())
-        tasks_df = pd.read_sql(tasks_query, conn, params=params)
-                
-        # notes
-        notes_query = """
-        SELECT note
-        FROM notes
-        WHERE user_name = %s AND date_added = %s
-        """
-        params = (user_name, date.today())
-        notes_df = pd.read_sql(notes_query, conn, params=params)
-
-        return tasks_df, notes_df
-        
-    except mysql.connector.Error as err:
-        logger.error(f"DB error: {err}")
-        return None, None
-    
-    finally:
-        if conn is not None:
-            conn.close()
-        
-        
 # GET TASKS FROM ASANA + CHECK NOTES FROM DB / extracting tasks for a user from today/сегодня section of mytask list
 def get_tasks(user_id, workspace_gid):
     
-    user_gid, user_name, user_token = get_redis_data(user_id)
+    user_gid, user_name, user_token, tg_user = get_redis_data(user_id)
     
     #get list gid for my tasks board
     url = f"https://app.asana.com/api/1.0/users/{user_gid}/user_task_list"
@@ -330,7 +291,7 @@ def format_df(df, extra_note, max_len=None, max_note_len=None):
 # CHECK NOTES from 'notes' bd
 def get_note(user_id):
     
-    user_gid, user_name, user_token = get_redis_data(user_id)
+    user_gid, user_name, user_token, tg_user = get_redis_data(user_id)
     
     try:
         conn = mysql.connector.connect(
@@ -371,7 +332,7 @@ def get_note(user_id):
 # ADD NOTE to DB 'notes'
 def store_note(note, user_id):
     
-    user_gid, user_name, user_token = get_redis_data(user_id)
+    user_gid, user_name, user_token, tg_user = get_redis_data(user_id)
     
     try:
         conn = mysql.connector.connect(
@@ -400,6 +361,152 @@ def store_note(note, user_id):
         logger.error(f"DB error: {err}")
         return False
         
+    finally:
+        if cursor is not None:
+            cursor.close()
+        if conn is not None:
+            conn.close()
+        
+         
+# GET TASKS FROM DB + CHECK NOTES for additions
+def get_tasks_dict():
+    
+    try:
+        conn = mysql.connector.connect(
+        user=db_user,
+        password=db_pass,
+        #host = db_host,
+        host='127.0.0.1',
+        database=database
+        )
+        
+        # tasks data
+        tasks_query = """
+        SELECT project_name, task_name, due_on, notes, url
+        FROM tasks 
+        WHERE date_extracted = %s
+        """
+        params = (date.today(),)
+        tasks_df = pd.read_sql(tasks_query, conn, params=params)
+        print(tasks_df.columns)
+        
+        # notes data
+        notes_query = """
+        SELECT user_name, note
+        FROM notes
+        WHERE date_added = %s
+        """
+        params = (date.today(),)
+        notes_df = pd.read_sql(notes_query, conn, params=params)
+        
+        logger.info(f"fetched tasks, notes data from DB")
+        
+        # form tasks_dict
+        tasks_dict = {}
+        
+        if tasks_df is not None and not tasks_df.empty and notes_df is not None:
+            users = tasks_df['user_name'].unique().tolist()
+            
+            for user in users:
+                user_tasks = tasks_df[tasks_df['user_name'] == user]
+                user_notes = notes_df[notes_df['user_name'] == user] if not notes_df.empty else None
+                
+                if user_notes is not None:
+                    user_tasks['extra_note'] = user_notes['note'].values
+                else:
+                    #user_tasks['extra_note'] = ''
+                    user_tasks['extra_note'] = [None] * len(user_tasks)
+                    
+                tasks_dict[user] = user_tasks.reset_index(drop=True)      
+                
+        return tasks_dict
+            
+    except mysql.connector.Error as err:
+        logger.error(f"DB error: {err}")
+        return None
+    
+    finally:
+        if conn is not None:
+            conn.close()
+
+
+# FORMAT report messages 
+def format_report(user_df, user, tg_user_name, max_len=None, max_note_len=None):
+    
+    current_date = datetime.now().strftime("%d %b %Y · %a")
+    if tg_user_name:
+        message = f"*{user}* @{tg_user_name}\n{current_date}\n\n"
+    else:
+        message = f"*{user}*\n{current_date}\n\n"
+    
+    grouped_tasks = user_df.groupby('project_name') # group tasks by project
+    
+    for project, group in grouped_tasks:
+        message += f"*{project if project else 'No project'}*\n"
+        
+        # reset idx, enumerate from 1
+        for idx, row in enumerate(group.itertuples(), start=1):
+            task = row.task_name
+            url = row.url
+            notes = row.notes if row.notes else '-'
+            due = row.due_on if row.due_on else 'No DL'
+
+            # crop notes if exceed max_note_len
+            if len(notes) > max_note_len:
+                notes = notes[:max_note_len - 3].rstrip() + " (...)"
+
+            task_entry = f"{idx}. [{task}]({url}) - `{due}`\n{notes}\n"
+            message += task_entry
+
+        message += "\n" 
+
+    if max_len and len(message) > max_len:
+        message = message[:max_len].rstrip() + " (...)"
+
+    if 'extra_note' in user_df.columns and not user_df['extra_note'].isnull().iloc[0]: 
+        extra_note = user_df['extra_note'].iloc[0]  
+        
+        if len(extra_note) > max_note_len:
+            extra_note = extra_note[:max_note_len - 3].rstrip() + " (...)"
+        message += f"*✲Note:*\n{extra_note}\n\n"
+        
+    return message
+
+
+#GET TG USER
+def get_tg_user(user_name):
+    
+    try:
+        conn = mysql.connector.connect(
+        user=db_user,
+        password=db_pass,
+        #host = db_host,
+        host='127.0.0.1',
+        database=database
+        )
+        
+        cursor = conn.cursor(dictionary=True)
+        
+        cursor.execute(
+            """
+            SELECT tg_user
+            FROM bot
+            WHERE user_name = %s 
+            LIMIT 1
+            """,
+            (user_name,)
+        )
+        
+        result = cursor.fetchone()
+        if result:
+            tg_user_name = result['tg_user']
+            return tg_user_name
+        return None
+        
+    except mysql.connector.Error as err:
+        logger.error(f"DB error: {err}")
+        return None
+    
     finally:
         if cursor is not None:
             cursor.close()

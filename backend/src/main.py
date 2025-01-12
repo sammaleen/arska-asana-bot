@@ -8,11 +8,12 @@ from datetime import datetime
 from flask import Flask, request, jsonify
 import threading
 import logging
+import asyncio
 
 from services.oauth_service import gen_oauth_link, store_state, get_user_id, get_token
-from services.asana_data import get_user_name, get_user_data, save_asana_data, get_redis_data, get_tasks, get_note, format_df, store_note
-from services.redis_client import get_redis_client
+from services.asana_data import get_user_name, get_user_data, save_asana_data, get_redis_data, get_tasks, get_note, format_df, store_note, get_tasks_dict, get_tg_user, format_report
 
+from services.redis_client import get_redis_client
 from config.load_env import bot_token, workspace_gid, gs_url
 
 
@@ -229,6 +230,50 @@ async def process_note(update: Update, context: CallbackContext):
     else:
         await query.answer("Use command '/mytasks' again")
 
+  
+# /REPORT command handler    
+async def report_command(update: Update, context: CallbackContext):
+    
+    tasks_dict = get_tasks_dict()
+    
+    if tasks_dict:
+        users = list(tasks_dict.keys())
+        mes_num = len(users)
+        
+        logger.info(f"got report data for {mes_num} users")
+        
+        # create formatted reports for each user from tasks_dict
+        reports = []
+        for user, user_df in tasks_dict.items():
+            tg_user_name = get_tg_user(user)
+            user_report = format_report(user_df, user, tg_user_name, max_len=4000, max_note_len=150)
+            reports.append(user_report)
+        
+        # send each report as a separate message 
+        for report in reports:
+            try:
+                await context.bot.send_message(
+                    chat_id=update.effective_chat.id,
+                    text=report,
+                    parse_mode='Markdown'
+                )   
+                logger.info(f"sent report to user: {user}")
+                await asyncio.sleep(1)
+                          
+            except Exception as err:
+                logger.error(f"error sending report to user: {user}")
+    else:
+        report_message = (
+            f"*{datetime.now().strftime('%d %b %Y - %a')}*\n\n"
+            "`No data is present for now`"
+        )
+        await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text = report_message,
+        parse_mode="Markdown"
+        )
+        logger.info("no tasks data is present for report")
+    
     
 # MENU bot post initialization
 async def post_init(application: Application) -> None:
@@ -236,7 +281,9 @@ async def post_init(application: Application) -> None:
     await application.bot.set_my_commands(
         [BotCommand('start', 'go to start message'),
          BotCommand('connect', 'connect to Asana'),
-         BotCommand('mytasks', 'get list of tasks for today')]
+         BotCommand('mytasks', 'get list of tasks for today'),
+         BotCommand('report', 'get report on tasks for all users')
+         ]
         )
     
     menu_button = {
@@ -262,8 +309,19 @@ async def callback():
         logger.error(f"invalid/expired state - {res_state}")
         return "Invalid / Expired state", 400
     logger.info(f"valid state for user - {user_id}")
-     
-    access_token = get_token(auth_code) # exchange auth code for access token
+    
+    # fetch tg username
+    try:
+        application_instance = app.config['application_instance']
+        chat = await application_instance.bot.get_chat(user_id)
+        tg_user = chat.username
+        logger.info(f"fetched tg username for user: {user_id} - {tg_user}")
+    except Exception as err:
+        logger.error(f"failed to fetch tg username for user: {user_id}")
+        tg_user = None 
+    
+    # exchange auth code for access token
+    access_token = get_token(auth_code) 
 
     if not access_token:
         logger.error(f"failed exchange auth code for token for user: {user_id}")
@@ -296,7 +354,7 @@ async def callback():
         
         return jsonify({"message": "auth successful", "user_token": "missing"}), 400
     
-    data_saved = save_asana_data(user_name, user_gid, user_token, user_id)
+    data_saved = save_asana_data(user_name, user_gid, user_token, user_id, tg_user)
     
     if not data_saved:
         logger.error(f"failed to save token for user: {user_name}/{user_id}")
@@ -350,6 +408,7 @@ def main():
     application.add_handler(CommandHandler("start", start_command)) 
     application.add_handler(CommandHandler("connect", connect_command)) 
     application.add_handler(CommandHandler("mytasks", mytasks_command)) 
+    application.add_handler(CommandHandler("report", report_command)) 
     
     # callback handlers
     application.add_handler(CallbackQueryHandler(add_notes_callback, pattern="add_notes"))
