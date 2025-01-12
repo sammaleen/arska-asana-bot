@@ -271,7 +271,7 @@ def format_df(df, extra_note, max_len=None, max_note_len=None):
             if len(notes) > max_note_len:
                 notes = notes[:max_note_len - 3].rstrip() + " (...)"
 
-            task_entry = f"{idx}. [{task}]({url}) - `{due}`\n{notes}\n"
+            task_entry = f"{idx}. [{task}]({url}) · `{due}`\n{notes}\n"
             message += task_entry
 
         message += "\n" 
@@ -382,7 +382,7 @@ def get_tasks_dict():
         
         # tasks data
         tasks_query = """
-        SELECT project_name, task_name, due_on, notes, url
+        SELECT project_name, user_name, task_name, due_on, notes, url
         FROM tasks 
         WHERE date_extracted = %s
         """
@@ -455,7 +455,7 @@ def format_report(user_df, user, tg_user_name, max_len=None, max_note_len=None):
             if len(notes) > max_note_len:
                 notes = notes[:max_note_len - 3].rstrip() + " (...)"
 
-            task_entry = f"{idx}. [{task}]({url}) - `{due}`\n{notes}\n"
+            task_entry = f"{idx}. [{task}]({url}) · `{due}`\n{notes}\n"
             message += task_entry
 
         message += "\n" 
