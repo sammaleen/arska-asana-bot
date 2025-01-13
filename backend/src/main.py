@@ -8,7 +8,6 @@ from datetime import datetime
 from flask import Flask, request, jsonify
 import threading
 import logging
-#import asyncio
 
 from services.oauth_service import gen_oauth_link, store_state, get_user_id, get_token
 from services.asana_data import get_user_name, get_user_data, save_asana_data, get_redis_data, get_tasks, get_note, format_df, store_note, get_tasks_dict, get_tg_user, format_report
@@ -65,7 +64,8 @@ async def start_command(update: Update, context: CallbackContext):
         "*Команды*\n"
         "[/start] \\- вернуться к стартовому сообщению\n"
         "[/connect] \\- авторизоваться в Асане\n"
-        "[/mytasks] \\- посмотреть задачи на день\n\n"
+        "[/mytasks] \\- посмотреть свои задачи на день\n"
+        "[/report] \\- получить отчет по плану на день для всех\n\n "
         
         "*По вопросам*\n"
         "[@sammaleen] \\- Лена"

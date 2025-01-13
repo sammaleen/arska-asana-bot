@@ -411,11 +411,16 @@ def get_tasks_dict():
                 user_tasks = tasks_df[tasks_df['user_name'] == user]
                 user_notes = notes_df[notes_df['user_name'] == user] if not notes_df.empty else None
                 
-                if user_notes is not None:
-                    user_tasks['extra_note'] = user_notes['note'].values
-                else:
+                #if user_notes is not None:
+                    #user_tasks['extra_note'] = [user_notes['note'].iloc[0]] * len(user_tasks)
+                #else:
                     #user_tasks['extra_note'] = ''
-                    user_tasks['extra_note'] = [None] * len(user_tasks)
+                    #user_tasks['extra_note'] = [None] * len(user_tasks)
+                
+                if user_notes is not None and not user_notes.empty:
+                    user_tasks.loc[:, 'extra_note'] = user_notes['note'].iloc[0]
+                else:
+                    user_tasks.loc[:, 'extra_note'] = None
                     
                 tasks_dict[user] = user_tasks.reset_index(drop=True)      
                 
