@@ -3,6 +3,7 @@ from telegram.ext import Application, CommandHandler, CallbackContext, CallbackQ
 from prettytable import PrettyTable
 
 import pandas as pd
+from pathlib import Path
 from datetime import datetime
 
 from flask import Flask, request, jsonify
@@ -10,7 +11,18 @@ import threading
 import logging
 
 from services.oauth_service import gen_oauth_link, store_state, get_user_id, get_token
-from services.asana_data import get_user_name, get_user_data, save_asana_data, get_redis_data, get_tasks, get_note, format_df, store_note, get_tasks_dict, get_tg_user, format_report
+
+from services.asana_data import (get_user_name,
+                                 get_user_data,
+                                 save_asana_data,
+                                 get_redis_data,
+                                 get_tasks,
+                                 get_note,
+                                 format_df, 
+                                 store_note,
+                                 get_tasks_report,
+                                 get_tg_user,
+                                 format_report)
 
 from services.redis_client import get_redis_client
 from config.load_env import bot_token, workspace_gid, gs_url
@@ -25,7 +37,6 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-
 
 # redis health check
 def redis_check():
@@ -50,7 +61,7 @@ async def start_command(update: Update, context: CallbackContext):
     store_state(update.effective_user.id, state) # store the state in Redis along with user_id mapping
     logger.info(f"user - {update.effective_user.id}, state - {state}")
     
-    keyboard = [[InlineKeyboardButton("Connect to Asana", url=oauth_link)]]
+    keyboard = [[InlineKeyboardButton("Connect to Asana 🔑", url=oauth_link)]]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     start_message = (
@@ -69,24 +80,18 @@ async def start_command(update: Update, context: CallbackContext):
         
         "*По вопросам*\n"
         "[@sammaleen] \\- Лена"
-
     )
         
     await context.bot.send_photo(
         chat_id=update.effective_chat.id,
-        photo=open("C:/Users/samma/cursor/asana_bot/backend/src/assets/start.png", "rb"),
+        #photo=open("C:/Users/samma/cursor/asana_bot/backend/src/assets/start3.png", "rb"),
+        photo=open(Path(__file__).parent / "assets/start.png", "rb"),
         caption=start_message,
         parse_mode="MarkdownV2",
         reply_markup=reply_markup
     )
     
-    #await update.message.reply_text(start_message, 
-                                    #reply_markup=reply_markup,
-                                    #parse_mode="Markdown",
-                                    #chat_id=update.effective_chat.id,
-                                    #photo=open("C:/Users/samma/cursor/asana_bot/backend/src/assets/start.png", "rb"))
-
-
+    
 # /CONNECT command handler
 async def connect_command(update: Update, context: CallbackContext):
     
@@ -115,13 +120,13 @@ async def mytasks_command(update: Update, context: CallbackContext):
         mytasks_message = format_df(df, extra_note, max_len=4000, max_note_len=150)
     else:
         mytasks_message = (
-            f"*{datetime.now().strftime('%d %b %Y - %a')}*\n\n"
+            f"*{datetime.now().strftime('%d %b %Y · %a')}*\n\n"
             "`No task for today`"
         )
     
     await context.bot.send_photo(
         chat_id=update.effective_chat.id,
-        photo=open("C:/Users/samma/cursor/asana_bot/backend/src/assets/mytasks2.png", "rb"),
+        photo=open(Path(__file__).parent / "assets/mytasks.png", "rb"),
         caption=mytasks_message,
         parse_mode="Markdown",
         reply_markup=reply_markup
@@ -139,8 +144,6 @@ async def add_notes_callback(update: Update, context: CallbackContext):
     
    user_id = query.from_user.id
    chat_id = query.message.chat.id
-   
-   logger.info(f"{user_id} used Add notes")
     
    # prompt the user
    note_input_state[user_id] = {"chat_id": chat_id}
@@ -154,14 +157,13 @@ async def add_notes_callback(update: Update, context: CallbackContext):
 # handle user response 
 async def note_input(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
+    user_gid, user_name, user_token, tg_user = get_redis_data(user_id)
     chat_id = note_input_state.get(user_id, {}).get("chat_id")
     
     if chat_id:
-        if update.effective_message:  # Handling text input
+        if update.effective_message:  # handling text input
             note_text = update.effective_message.text
-            note_input_state[user_id]["note"] = note_text
-            
-            logger.info(f"add notes button used by: {user_id}")
+            note_input_state[user_id]["note"] = note_text 
             
             keyboard = [
                 [
@@ -178,28 +180,29 @@ async def note_input(update: Update, context: CallbackContext):
                     reply_markup=reply_markup,
                     parse_mode="Markdown"
                 )
-                logger.info(f"note '{note_text}' sent to user {user_id} for confirmation")
+                logger.info(f"note '{note_text}' sent to user {user_id}/{user_name} for confirmation")
             except Exception as err:
-                logger.error(f"error while sending message to chat {chat_id}: {err}")
+                logger.error(f"error while sending message to chat {chat_id}/{user_name}: {err}")
         else:
             await update.message.reply_text("To add notes use '/mytasks' command -> 'Add notes' button")
-            logger.info("User tried to add notes without initiating from the correct button.")
+            logger.info("user tried to add notes without initiating from the correct button")
     else:
         await update.message.reply_text("To add notes use '/mytasks' command -> 'Add notes' button")
-        logger.info("User tried to add notes without initiating from the correct button.")
+        logger.info("user tried to add notes without initiating from the correct button")
 
         
 # handle note saving/rewriting 
 async def process_note(update: Update, context: CallbackContext):
     query = update.callback_query
     user_id = query.from_user.id
+    user_gid, user_name, user_token, tg_user = get_redis_data(user_id)
 
     if user_id in note_input_state:
         data = query.data
         chat_id = note_input_state[user_id]["chat_id"]
         note = note_input_state[user_id].get("note")
         
-        logger.info(f"{user_id} clicked button {data}")
+        logger.info(f"{user_id}/{user_name} clicked button {data}")
 
         # save note
         if data == "confirm_note": 
@@ -234,7 +237,10 @@ async def process_note(update: Update, context: CallbackContext):
 # /REPORT command handler    
 async def report_command(update: Update, context: CallbackContext):
     
-    tasks_dict = get_tasks_dict()
+    user_id = update.effective_user.id
+    user_gid, user_name, user_token, tg_user = get_redis_data(user_id)
+    
+    tasks_dict = get_tasks_report(user_name)
     
     if tasks_dict:
         users = list(tasks_dict.keys())
@@ -257,22 +263,19 @@ async def report_command(update: Update, context: CallbackContext):
                     text=report,
                     parse_mode='Markdown'
                 )   
-                logger.info(f"sent report to user: {user}")
-                #await asyncio.sleep(1)
-                          
+                logger.info(f"report sent to user: {user_id}/{user_name}")
             except Exception as err:
-                logger.error(f"error sending report to user: {user}")
+                logger.error(f"error sending report to user: {user_id}/{user_name}")
     else:
         report_message = (
             f"*{datetime.now().strftime('%d %b %Y - %a')}*\n\n"
             "`No data is present for now`"
         )
         await context.bot.send_message(
-        chat_id=update.effective_chat.id,
-        text = report_message,
-        parse_mode="Markdown"
+            chat_id=update.effective_chat.id,
+            text = report_message,
+            parse_mode="Markdown"
         )
-        logger.info("no tasks data is present for report")
     
     
 # MENU bot post initialization
@@ -315,9 +318,10 @@ async def callback():
         application_instance = app.config['application_instance']
         chat = await application_instance.bot.get_chat(user_id)
         tg_user = chat.username
-        logger.info(f"fetched tg username for user: {user_id} - {tg_user}")
+        logger.info(f"fetched TG username {tg_user} for user: {user_id}")
+        
     except Exception as err:
-        logger.error(f"failed to fetch tg username for user: {user_id}")
+        logger.error(f"failed to fetch TG username for user: {user_id}")
         tg_user = None 
     
     # exchange auth code for access token
@@ -336,12 +340,12 @@ async def callback():
     user_gid, user_token = get_user_data(user_name)
     
     if not user_token:
-        logger.error(f"failed to get permanent token from db for user: {user_name}/{user_id}")
+        logger.error(f"failed to get permanent token from db for user: {user_id}/{user_name}")
         auth_message = (
             "`auth successful`\n"
             f"`user_name: {user_name}`\n"
-            "`user_token: missing\n`"
-            f"[click here to set personal token]({gs_url})"
+            "`user_token: missing\n\n`"
+            f"[Click here to set personal token 🡥]({gs_url})"
             )
         
         try:
@@ -350,14 +354,14 @@ async def callback():
             await chat.send_message(auth_message, parse_mode="Markdown")
             
         except Exception as err:
-            logger.error(f"error sending message to user: {user_name}/{user_id}: {err}")
+            logger.error(f"error sending message to user: {user_id}/{user_name}: {err}")
         
-        return jsonify({"message": "auth successful", "user_token": "missing"}), 400
+        return jsonify({"message": "auth successful", "user_token": "missing", "check this": gs_url}), 400
     
     data_saved = save_asana_data(user_name, user_gid, user_token, user_id, tg_user)
     
     if not data_saved:
-        logger.error(f"failed to save token for user: {user_name}/{user_id}")
+        logger.error(f"failed to save token for user: {user_id}/{user_name}")
         auth_message = (
             "`auth successful`\n"
             f"`user_name: {user_name}`\n"
@@ -370,7 +374,7 @@ async def callback():
             await chat.send_message(auth_message, parse_mode="Markdown")
             
         except Exception as err:
-            logger.error(f"error sending message to user: {user_name}/{user_id}: {err}")
+            logger.error(f"error sending message to user: {user_id}/{user_name}: {err}")
             
         return jsonify({"message": "auth failed"}), 500
     
@@ -387,9 +391,9 @@ async def callback():
         await chat.send_message(auth_message, parse_mode="Markdown")
         
     except Exception as err:
-        logger.error(f"error sending message to user: {user_name}/{user_id}: {err}")
+        logger.error(f"error sending message to user: {user_id}/{user_name}: {err}")
 
-    logger.info(f"token saved for user: {user_name}/{user_id}")
+    logger.info(f"token saved for user: {user_id}/{user_name}")
     return jsonify({"message": "auth successful", "user_name": user_name, "user_token": "present, saved"})
     
     

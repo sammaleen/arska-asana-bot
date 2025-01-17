@@ -1,6 +1,8 @@
 import requests
 import json
 import mysql.connector
+import redis
+import redis.exceptions
 import pandas as pd
 from datetime import date
 from datetime import datetime
@@ -14,7 +16,7 @@ from services.redis_client import get_redis_client
 redis_client = get_redis_client()
 
 
-# GET USER NAME getting user name with exchanged token during authorization 
+# GET USER NAME with exchanged access token during auth
 def get_user_name(access_token):
     
     url = 'https://app.asana.com/api/1.0/users/me'
@@ -25,44 +27,61 @@ def get_user_name(access_token):
         'opt_pretty': True
     }
     
-    response = requests.get(url, headers=headers, params=payload)
-    status = response.status_code
-
-    if status == 200:
-        response_json = response.json()
-        user_name = response_json['data']['name'] 
-    else:
-        print(f'error: {status}')
-    
-    return user_name
-
+    try:
+        response = requests.get(url, headers=headers, params=payload)
+        response.raise_for_status()
         
+        response_json = response.json()
+        user_name = response_json.get('data',{}).get('name')
+        return user_name
+    
+    except requests.exceptions.RequestException as err:
+        logging.error(f"network errror: {err} trying fetching Asana username")
+        return None
+    
 # GET PERSONAL TOKEN AND GID from db 'users'
 def get_user_data(user_name):
     
-    conn = mysql.connector.connect(user = db_user,
-                               password = db_pass,
-                               #host = db_host,
-                               host='127.0.0.1',
-                               database = database)
+    conn = None
+    cursor = None
     
-    cursor = conn.cursor(dictionary=True)
-    
-    cursor.execute("SELECT user_gid, user_token FROM users WHERE name = %s", 
-                   (user_name,))
-    result = cursor.fetchone()
-    
-    cursor.close()
-    conn.close()
-    
-    if result:
-        return result.get('user_gid'), result.get('user_token')
-    else:
+    try:
+        conn = mysql.connector.connect(
+            user = db_user,
+            password = db_pass,
+            #host = db_host,
+            host='127.0.0.1',
+            database = database
+            )
+        cursor = conn.cursor(dictionary=True)
+        
+        cursor.execute(
+            "SELECT user_gid, user_token FROM users WHERE name = %s", 
+            (user_name,)
+            )
+        result = cursor.fetchone()
+        
+        if result:
+            return result.get('user_gid'), result.get('user_token')
+        else:
+            return None, None
+        
+    except mysql.connector.Error as err:
+        logging.error(f"DB error: {err} for user: {user_name}")
         return None, None
-    
+        
+    finally:
+        if cursor is not None:
+            cursor.close()
+        if conn is not None:
+            conn.close()
+        
     
 # SAVE EXTRACTED TG and ASANA data to redis cache and table 'bot'
 def save_asana_data(user_name, user_gid, user_token, user_id, tg_user):
+    
+    conn = None
+    cursor = None
     
     try:
         redis_key = f"user_data:{user_id}"
@@ -89,11 +108,15 @@ def save_asana_data(user_name, user_gid, user_token, user_id, tg_user):
         )
         conn.commit()
         
-        logger.info(f"asana data saved for {user_name}/{user_id}")
+        logger.info(f"Asana data saved for: {user_name}/{user_id}")
         return True
     
     except mysql.connector.Error as err:
-        logger.error(f"DB error: {err}")
+        logger.error(f"DB error: {err} for user: {user_name}/{user_id}")
+        return False
+    
+    except redis.exceptions.RedisError as err:
+        logger.error(f"Redis error: {err} for user: {user_name}/{user_id}")
         return False
     
     finally:
@@ -106,12 +129,13 @@ def save_asana_data(user_name, user_gid, user_token, user_id, tg_user):
 # GET REDIS DATA FROM CACHE
 def get_redis_data(user_id):
     
-    cursor = None
     conn = None
+    cursor = None
     
     try:
+        # checking redis cache
         redis_key = f"user_data:{user_id}"
-        cached_data = redis_client.get(redis_key)  # check redis cache for token
+        cached_data = redis_client.get(redis_key) 
         
         if cached_data:
             user_data = json.loads(cached_data)
@@ -121,7 +145,7 @@ def get_redis_data(user_id):
             user_token = user_data.get('user_token')
             tg_user = user_data.get('tg_user')
             
-            logger.info(f"user data retrieved from Redis cache for user: {user_id}")
+            logger.info(f"user data retrieved from Redis cache for user: {user_name}/{user_id}")
             return user_gid, user_name, user_token, tg_user
         
         # fallback to db 'bot' table
@@ -134,7 +158,11 @@ def get_redis_data(user_id):
         )
         cursor = conn.cursor(dictionary=True)
         
-        cursor.execute("SELECT tg_user, user_name, user_token, user_gid FROM bot WHERE user_id = %s",
+        cursor.execute("""
+                       ELECT tg_user, user_name, user_token, user_gid 
+                       FROM bot 
+                       WHERE user_id = %s
+                       """,
                        (user_id,))
         result = cursor.fetchone()
         
@@ -147,13 +175,19 @@ def get_redis_data(user_id):
             # update redis cache
             redis_data = {"user_gid": user_gid, "tg_user": tg_user, "user_name": user_name, "user_token": user_token}
             redis_client.set(redis_key, json.dumps(redis_data), ex=token_ttl)
-            logger.info(f"user data retrieved from DB and cached in Redis for user: {user_id}")
+            
+            logger.info(f"user data retrieved from DB and cached in Redis for user: {user_id}/{user_name}")
             return user_gid, user_name, user_token, tg_user
         
+        logger.info(f"no data is found for user: {user_id}")
         return None, None, None, None
         
     except mysql.connector.Error as err:
         logger.error(f"DB error: {err}")
+        return None, None, None, None
+    
+    except redis.exceptions.RedisError as err:
+        logger.error(f"Redis error: {err} for user: {user_id}")
         return None, None, None, None
     
     finally:
@@ -168,6 +202,10 @@ def get_tasks(user_id, workspace_gid):
     
     user_gid, user_name, user_token, tg_user = get_redis_data(user_id)
     
+    if user_gid is None or user_token is None:
+        logging.error(f"unable to retrieve Asana creds for user: {user_id}")
+        return pd.DataFrame()
+    
     #get list gid for my tasks board
     url = f"https://app.asana.com/api/1.0/users/{user_gid}/user_task_list"
     headers = {'Authorization': f'Bearer {user_token}'}
@@ -178,15 +216,16 @@ def get_tasks(user_id, workspace_gid):
         'opt_pretty': True  
         }
     
-    response = requests.get(url, headers=headers, params=payload)
-    status = response.status_code
-
-    if status == 200:
+    try: 
+        response = requests.get(url, headers=headers, params=payload)
+        response.raise_for_status()
+        
         response_json = response.json()
-    else:
-        print(f'error: {status}')
+        list_gid = response_json.get('data',{}).get('gid')
     
-    list_gid = response_json['data']['gid']
+    except requests.exceptions.RequestException as err:
+        logging.error(f"network errror: {err} trying fetching Asana list_gid for user: {user_name}/{user_id}")
+        return pd.DataFrame()
     
     # get my tasks for today
     my_tasks = []
@@ -200,7 +239,7 @@ def get_tasks(user_id, workspace_gid):
         'opt_pretty': True  
         }
     
-    # pagination
+    # pagination 
     while True:
         response = requests.get(url, headers=headers, params=payload)
         
@@ -216,19 +255,20 @@ def get_tasks(user_id, workspace_gid):
             else:
                 break 
         else:
-            print(f"error: {response.status_code}")
+            logging.error(f"error: {response.status_code} while fetching Asana tasks for user: {user_name}/{user_id}")
             break
         
     if my_tasks:
         my_tasks_df = pd.json_normalize(my_tasks, max_level=3) 
+        
         my_tasks_df.rename(columns={'gid':'task_gid',
                                     'name':'task_name',
                                     'permalink_url':'url',
                                     'projects':'project_name'}, inplace=True)
     
-        # SECTION NAME = TODAY и СЕГОДНЯ
-        my_tasks_df = my_tasks_df[(my_tasks_df['assignee_section.name'] == 'Today') 
-                                  | (my_tasks_df['assignee_section.name'] == 'Сегодня')]
+        # SECTION NAME = TODAY или СЕГОДНЯ
+        my_tasks_df = my_tasks_df[(my_tasks_df['assignee_section.name'].str.lower() == 'today') 
+                                  | (my_tasks_df['assignee_section.name'].str.lower() == 'сегодня')]
         
         # extracting project names from nested list []
         if 'project_name' in my_tasks_df.columns:
@@ -239,7 +279,6 @@ def get_tasks(user_id, workspace_gid):
         my_tasks_df.drop('task_gid', axis=1, inplace=True)
         my_tasks_df['idx'] = (my_tasks_df.index + 1).tolist()  
         order = ['idx','project_name','task_name','due_on','notes','url']
-        
         my_tasks_df = my_tasks_df[order]
         
     else:
@@ -250,9 +289,9 @@ def get_tasks(user_id, workspace_gid):
 
 # FORMAT mytasks message
 
-def format_df(df, extra_note, max_len=None, max_note_len=None):
+def format_df2(df, extra_note, max_len=None, max_note_len=None):
     
-    current_date = datetime.now().strftime("%d %b %Y - %a")
+    current_date = datetime.now().strftime("%d %b %Y · %a")
     message = f"*{current_date}*\n\n"
     
     grouped_tasks = df.groupby('project_name') # group tasks by project
@@ -287,11 +326,63 @@ def format_df(df, extra_note, max_len=None, max_note_len=None):
         
     return message
 
+# ----
+
+
+def format_df(df, extra_note, max_len=None, max_note_len=None):
+    
+    current_date = datetime.now().strftime("%d %b %Y · %a")
+    message = f"*{current_date}*\n\n"
+    
+    grouped_tasks = df.groupby('project_name') # group tasks by project
+    
+    for project, group in grouped_tasks:
+        project_name = project if project else 'No project'
+        message += f"*{project_name}*\n"
+        
+        # reset idx, enumerate from 1
+        for idx, row in enumerate(group.itertuples(), start=1):
+            task = row.task_name
+            url = row.url
+            notes = row.notes if row.notes else '-'
+            due = row.due_on if row.due_on else 'No DL'
+
+            # crop notes if exceed max_note_len
+            if len(notes) > max_note_len:
+                notes = notes[:max_note_len - 3].rstrip() + "(...)"
+            
+            # format due date
+            if due != 'No DL':
+                due_date = datetime.strptime(due,'%Y-%m-%d')
+                due = due_date.strftime("%d-%m-%Y")
+
+            task_entry = f"{idx}. [{task}]({url}) · `{due}`\n{notes}\n"
+            message += task_entry
+
+        message += "\n" 
+
+    if max_len and len(message) > max_len:
+        message = message[:max_len].rstrip() + "(...)"
+
+    if extra_note:
+        if len(extra_note) > max_note_len:
+            extra_note = extra_note[:max_note_len - 3].rstrip() + "(...)"
+        message += f"*✲Note:*\n{extra_note}\n\n"
+        
+    return message
+
 
 # CHECK NOTES from 'notes' bd
 def get_note(user_id):
     
+    conn = None
+    cursor = None
+    
     user_gid, user_name, user_token, tg_user = get_redis_data(user_id)
+    
+    if user_name is None:
+        logging.error(f"unable to retrieve Asana creds for user: {user_id}")
+        return None
     
     try:
         conn = mysql.connector.connect(
@@ -313,6 +404,7 @@ def get_note(user_id):
         )
         
         result = cursor.fetchone()
+        
         if result:
             extra_note = result['note']
             return extra_note
@@ -332,7 +424,14 @@ def get_note(user_id):
 # ADD NOTE to DB 'notes'
 def store_note(note, user_id):
     
+    conn = None
+    cursor = None
+    
     user_gid, user_name, user_token, tg_user = get_redis_data(user_id)
+    
+    if user_name is None:
+        logging.error(f"unable to retrieve Asana creds for user: {user_id}")
+        return False
     
     try:
         conn = mysql.connector.connect(
@@ -345,7 +444,8 @@ def store_note(note, user_id):
         cursor = conn.cursor()
         
         cursor.execute(
-            """INSERT INTO notes (user_name, note, date_added)
+            """
+            INSERT INTO notes (user_name, note, date_added)
             VALUES (%s, %s, %s)
             ON DUPLICATE KEY UPDATE
             note = VALUES(note), date_added = VALUES(date_added)
@@ -354,7 +454,7 @@ def store_note(note, user_id):
         )
         conn.commit()
         
-        logger.info(f"note saved for: {user_id}/{user_name}")
+        logger.info(f"note {note} saved for: {user_name}/{user_id}")
         return True
         
     except mysql.connector.Error as err:
@@ -369,8 +469,10 @@ def store_note(note, user_id):
         
          
 # GET TASKS FROM DB + CHECK NOTES for additions
-def get_tasks_dict():
+def get_tasks_report(user_name):
     
+    conn = None
+        
     try:
         conn = mysql.connector.connect(
         user=db_user,
@@ -381,25 +483,27 @@ def get_tasks_dict():
         )
         
         # tasks data
-        tasks_query = """
-        SELECT project_name, user_name, task_name, due_on, notes, url
-        FROM tasks 
-        WHERE date_extracted = %s
-        """
+        tasks_query = (
+            """
+            SELECT project_name, user_name, task_name, due_on, notes, url
+            FROM tasks 
+            WHERE date_extracted = %s
+            """
+            )
         params = (date.today(),)
         tasks_df = pd.read_sql(tasks_query, conn, params=params)
-        print(tasks_df.columns)
         
         # notes data
-        notes_query = """
-        SELECT user_name, note
-        FROM notes
-        WHERE date_added = %s
-        """
-        params = (date.today(),)
+        notes_query = (
+            """
+            SELECT user_name, note
+            FROM notes
+            WHERE date_added = %s
+            """
+            )
         notes_df = pd.read_sql(notes_query, conn, params=params)
         
-        logger.info(f"fetched tasks, notes data from DB")
+        logger.info(f"report data fetched for user: {user_name}")
         
         # form tasks_dict
         tasks_dict = {}
@@ -410,12 +514,6 @@ def get_tasks_dict():
             for user in users:
                 user_tasks = tasks_df[tasks_df['user_name'] == user]
                 user_notes = notes_df[notes_df['user_name'] == user] if not notes_df.empty else None
-                
-                #if user_notes is not None:
-                    #user_tasks['extra_note'] = [user_notes['note'].iloc[0]] * len(user_tasks)
-                #else:
-                    #user_tasks['extra_note'] = ''
-                    #user_tasks['extra_note'] = [None] * len(user_tasks)
                 
                 if user_notes is not None and not user_notes.empty:
                     user_tasks.loc[:, 'extra_note'] = user_notes['note'].iloc[0]
@@ -447,7 +545,8 @@ def format_report(user_df, user, tg_user_name, max_len=None, max_note_len=None):
     grouped_tasks = user_df.groupby('project_name') # group tasks by project
     
     for project, group in grouped_tasks:
-        message += f"*{project if project else 'No project'}*\n"
+        project_name = project if project else 'No project'
+        message += f"*{project_name}*\n"
         
         # reset idx, enumerate from 1
         for idx, row in enumerate(group.itertuples(), start=1):
@@ -458,7 +557,7 @@ def format_report(user_df, user, tg_user_name, max_len=None, max_note_len=None):
 
             # crop notes if exceed max_note_len
             if len(notes) > max_note_len:
-                notes = notes[:max_note_len - 3].rstrip() + " (...)"
+                notes = notes[:max_note_len - 3].rstrip() + "(...)"
 
             task_entry = f"{idx}. [{task}]({url}) · `{due}`\n{notes}\n"
             message += task_entry
@@ -466,13 +565,13 @@ def format_report(user_df, user, tg_user_name, max_len=None, max_note_len=None):
         message += "\n" 
 
     if max_len and len(message) > max_len:
-        message = message[:max_len].rstrip() + " (...)"
+        message = message[:max_len].rstrip() + "(...)"
 
     if 'extra_note' in user_df.columns and not user_df['extra_note'].isnull().iloc[0]: 
         extra_note = user_df['extra_note'].iloc[0]  
         
         if len(extra_note) > max_note_len:
-            extra_note = extra_note[:max_note_len - 3].rstrip() + " (...)"
+            extra_note = extra_note[:max_note_len - 3].rstrip() + "(...)"
         message += f"*✲Note:*\n{extra_note}\n\n"
         
     return message
@@ -480,6 +579,9 @@ def format_report(user_df, user, tg_user_name, max_len=None, max_note_len=None):
 
 #GET TG USER
 def get_tg_user(user_name):
+    
+    conn = None
+    cursor = None
     
     try:
         conn = mysql.connector.connect(
@@ -503,8 +605,10 @@ def get_tg_user(user_name):
         )
         
         result = cursor.fetchone()
+        
         if result:
             tg_user_name = result['tg_user']
+            logger.info(f"TG username {tg_user_name} retrieved from DB for user: {user_name}")
             return tg_user_name
         return None
         

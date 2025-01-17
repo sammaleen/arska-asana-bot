@@ -23,9 +23,9 @@ def gen_oauth_link():
     
     return oauth_link, state
 
-# store state in redis for 5 mins
+# store state in redis for 10 mins
 def store_state(user_id, state):
-    redis_client.setex(f'oauth_state:{state}', 300, user_id)
+    redis_client.setex(f'oauth_state:{state}', 600, user_id)
     
 # get user_id from redis using the state
 def get_user_id(state):
