@@ -6,6 +6,8 @@ import redis.exceptions
 import pandas as pd
 from datetime import date
 from datetime import datetime
+from datetime import datetime, date
+
 
 from config.load_env import db_user, db_host, db_pass, database, token_ttl
 
@@ -349,7 +351,7 @@ def format_df(df, extra_note, max_len=None, max_note_len=None):
 
             # crop notes if exceed max_note_len
             if len(notes) > max_note_len:
-                notes = notes[:max_note_len - 3].rstrip() + "(...)"
+                notes = notes[:max_note_len - 3].rstrip() + " (...)"
             
             # format due date
             if due != 'No DL':
@@ -362,11 +364,11 @@ def format_df(df, extra_note, max_len=None, max_note_len=None):
         message += "\n" 
 
     if max_len and len(message) > max_len:
-        message = message[:max_len].rstrip() + "(...)"
+        message = message[:max_len].rstrip() + " (...)"
 
     if extra_note:
         if len(extra_note) > max_note_len:
-            extra_note = extra_note[:max_note_len - 3].rstrip() + "(...)"
+            extra_note = extra_note[:max_note_len - 3].rstrip() + " (...)"
         message += f"*✲Note:*\n{extra_note}\n\n"
         
     return message
@@ -493,6 +495,9 @@ def get_tasks_report(user_name):
         params = (date.today(),)
         tasks_df = pd.read_sql(tasks_query, conn, params=params)
         
+        tasks_df['due_on'] = pd.to_datetime(tasks_df['due_on'], errors='coerce').dt.date
+        tasks_df['due_on'] = tasks_df['due_on'].apply(lambda x: x.strftime("%d-%m-%Y") if pd.notnull(x) else "No DL")
+        
         # notes data
         notes_query = (
             """
@@ -504,7 +509,7 @@ def get_tasks_report(user_name):
         notes_df = pd.read_sql(notes_query, conn, params=params)
         
         logger.info(f"report data fetched for user: {user_name}")
-        
+                
         # form tasks_dict
         tasks_dict = {}
         
@@ -537,6 +542,7 @@ def get_tasks_report(user_name):
 def format_report(user_df, user, tg_user_name, max_len=None, max_note_len=None):
     
     current_date = datetime.now().strftime("%d %b %Y · %a")
+    
     if tg_user_name:
         message = f"*{user}* @{tg_user_name}\n{current_date}\n\n"
     else:
@@ -557,7 +563,7 @@ def format_report(user_df, user, tg_user_name, max_len=None, max_note_len=None):
 
             # crop notes if exceed max_note_len
             if len(notes) > max_note_len:
-                notes = notes[:max_note_len - 3].rstrip() + "(...)"
+                notes = notes[:max_note_len - 3].rstrip() + " (...)"
 
             task_entry = f"{idx}. [{task}]({url}) · `{due}`\n{notes}\n"
             message += task_entry
@@ -565,13 +571,13 @@ def format_report(user_df, user, tg_user_name, max_len=None, max_note_len=None):
         message += "\n" 
 
     if max_len and len(message) > max_len:
-        message = message[:max_len].rstrip() + "(...)"
+        message = message[:max_len].rstrip() + " (...)"
 
     if 'extra_note' in user_df.columns and not user_df['extra_note'].isnull().iloc[0]: 
         extra_note = user_df['extra_note'].iloc[0]  
         
         if len(extra_note) > max_note_len:
-            extra_note = extra_note[:max_note_len - 3].rstrip() + "(...)"
+            extra_note = extra_note[:max_note_len - 3].rstrip() + " (...)"
         message += f"*✲Note:*\n{extra_note}\n\n"
         
     return message
