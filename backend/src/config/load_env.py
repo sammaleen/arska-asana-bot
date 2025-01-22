@@ -33,8 +33,6 @@ rd_pass = os.getenv("RD_PASS")
 rd_user = os.getenv("RD_USER")
 token_ttl = 518400 # store cache for 6 days
 
-
-
 # misc
 gs_url = os.getenv("GS_URL")
 
