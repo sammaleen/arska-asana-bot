@@ -3,9 +3,9 @@ from config.load_env import rd_host, rd_port, db_user, db_pass
 
 redis_client = redis.Redis(host=rd_host,
                            port=rd_port,
-                           decode_responses=True,
                            username=db_user,
-                           password=db_pass)
+                           password=db_pass,
+                           decode_responses=True)
 
 def get_redis_client():
     return redis_client
