@@ -84,7 +84,6 @@ async def start_command(update: Update, context: CallbackContext):
         
     await context.bot.send_photo(
         chat_id=update.effective_chat.id,
-        #photo=open("C:/Users/samma/cursor/asana_bot/backend/src/assets/start3.png", "rb"),
         photo=open(Path(__file__).parent / "assets/start.png", "rb"),
         caption=start_message,
         parse_mode="MarkdownV2",
@@ -97,7 +96,7 @@ async def connect_command(update: Update, context: CallbackContext):
     
     oauth_link, state = gen_oauth_link()  # generate oauth link
     store_state(update.effective_user.id, state) # store the state in Redis along with user_id mapping
-    logger.info(f"user - {update.effective_user.id}, state - {state}")
+    logger.info(f"auth for user - {update.effective_user.id}, state - {state}")
     
     keyboard = [[InlineKeyboardButton("OAuth Link", url=oauth_link)]]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -400,7 +399,7 @@ async def callback():
 # run flask app in a separate thread to handle OAuth callback
 def start_flask_app(application):
     app.config['application_instance'] = application  # pass application instance to Flask
-    app.run(port=5001, debug=True, use_reloader=False)
+    app.run(host="0.0.0.0", port=8000, debug=True, use_reloader=False)
 
 
 # bot initialization 
@@ -419,9 +418,9 @@ def main():
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, note_input))
     application.add_handler(CallbackQueryHandler(process_note, pattern="^(confirm_note|edit_note)$"))
     
-    
     # start flask app in a separate thread
     flask_thread = threading.Thread(target=start_flask_app, args=(application,))
+    flask_thread.daemon = True
     flask_thread.start()
 
     # start bot

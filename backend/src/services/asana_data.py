@@ -287,47 +287,6 @@ def get_tasks(user_id, workspace_gid):
 
 
 # FORMAT mytasks message
-
-def format_df2(df, extra_note, max_len=None, max_note_len=None):
-    
-    current_date = datetime.now().strftime("%d %b %Y · %a")
-    message = f"*{current_date}*\n\n"
-    
-    grouped_tasks = df.groupby('project_name') # group tasks by project
-    
-    for project, group in grouped_tasks:
-        message += f"*{project if project else 'No project'}*\n"
-        
-        # reset idx, enumerate from 1
-        for idx, row in enumerate(group.itertuples(), start=1):
-            task = row.task_name
-            url = row.url
-            notes = row.notes if row.notes else '-'
-            due = row.due_on if row.due_on else 'No DL'
-
-            # crop notes if exceed max_note_len
-            if len(notes) > max_note_len:
-                notes = notes[:max_note_len - 3].rstrip() + " (...)"
-
-            task_entry = f"{idx}. [{task}]({url}) · `{due}`\n{notes}\n"
-            message += task_entry
-
-        message += "\n" 
-
-    if max_len and len(message) > max_len:
-        message = message[:max_len].rstrip() + " (...)"
-
-    if extra_note:
-        if len(extra_note) > max_note_len:
-            extra_note = extra_note[:max_note_len - 3].rstrip() + " (...)"
-        #message += "\n" 
-        message += f"*✲Note:*\n{extra_note}\n\n"
-        
-    return message
-
-# ----
-
-
 def format_df(df, extra_note, max_len=None, max_note_len=None):
     
     current_date = datetime.now().strftime("%d %b %Y · %a")
@@ -355,7 +314,7 @@ def format_df(df, extra_note, max_len=None, max_note_len=None):
                 due_date = datetime.strptime(due,'%Y-%m-%d')
                 due = due_date.strftime("%d-%m-%Y")
 
-            task_entry = f"{idx}. [{task}]({url}) · `{due}`\n{notes}\n"
+            task_entry = f"{idx}. [{task}]({url}) · `{due}`\n{notes}\n\n"
             message += task_entry
 
         message += "\n" 
