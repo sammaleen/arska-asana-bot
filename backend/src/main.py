@@ -400,7 +400,7 @@ async def callback():
 # run flask app in a separate thread to handle OAuth callback
 def start_flask_app(application):
     app.config['application_instance'] = application  # pass application instance to Flask
-    app.run(port=5000, debug=True, use_reloader=False)
+    app.run(port=5001, debug=True, use_reloader=False)
 
 
 # bot initialization 
