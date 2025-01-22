@@ -1,6 +1,5 @@
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand
 from telegram.ext import Application, CommandHandler, CallbackContext, CallbackQueryHandler, MessageHandler, filters
-from prettytable import PrettyTable
 
 import pandas as pd
 from pathlib import Path
@@ -22,7 +21,8 @@ from services.asana_data import (get_user_name,
                                  store_note,
                                  get_tasks_report,
                                  get_tg_user,
-                                 format_report)
+                                 format_report
+                                 )
 
 from services.redis_client import get_redis_client
 from config.load_env import bot_token, workspace_gid, gs_url

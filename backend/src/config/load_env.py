@@ -25,10 +25,8 @@ db_pass = os.getenv("DB_PASS")
 database = os.getenv("DATABASE")
 
 # redis
-#rd_host = 'localhost'
-#rd_port = 6379
 rd_host = os.getenv("RD_HOST")
-rd_port = os.getenv("RD_PORT")
+rd_port = int(os.getenv("RD_PORT"))
 rd_pass = os.getenv("RD_PASS")
 rd_user = os.getenv("RD_USER")
 token_ttl = 518400 # store cache for 6 days
@@ -37,7 +35,5 @@ token_ttl = 518400 # store cache for 6 days
 gs_url = os.getenv("GS_URL")
 
  
-
-
 
 

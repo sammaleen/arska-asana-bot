@@ -1,15 +1,11 @@
 import redis
-from config.load_env import rd_host, rd_port, db_user, db_pass
+from config.load_env import rd_host, rd_port, rd_user, rd_pass
 
 redis_client = redis.Redis(host=rd_host,
                            port=rd_port,
-                           username=db_user,
-                           password=db_pass,
+                           username=rd_user,
+                           password=rd_pass,
                            decode_responses=True)
 
 def get_redis_client():
     return redis_client
-
-success = redis_client.set('foo', 'bar')
-result = redis_client.get('foo')
-print(result)
