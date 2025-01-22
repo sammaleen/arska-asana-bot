@@ -518,7 +518,7 @@ def format_report(user_df, user, tg_user_name, max_len=None, max_note_len=None):
             if len(notes) > max_note_len:
                 notes = notes[:max_note_len - 3].rstrip() + " (...)"
 
-            task_entry = f"{idx}. [{task}]({url}) · `{due}`\n{notes}\n"
+            task_entry = f"{idx}. [{task}]({url}) · `{due}`\n{notes}\n\n"
             message += task_entry
 
         message += "\n" 
