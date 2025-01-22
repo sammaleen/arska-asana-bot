@@ -51,8 +51,7 @@ def get_user_data(user_name):
         conn = mysql.connector.connect(
             user = db_user,
             password = db_pass,
-            #host = db_host,
-            host='127.0.0.1',
+            host = db_host,
             database = database
             )
         cursor = conn.cursor(dictionary=True)
@@ -93,8 +92,7 @@ def save_asana_data(user_name, user_gid, user_token, user_id, tg_user):
         conn = mysql.connector.connect(
             user=db_user,
             password=db_pass,
-            #host = db_host,
-            host='127.0.0.1',
+            host = db_host,
             database=database
         )
         cursor = conn.cursor()
@@ -154,8 +152,7 @@ def get_redis_data(user_id):
         conn = mysql.connector.connect(
             user=db_user,
             password=db_pass,
-            #host = db_host,
-            host='127.0.0.1',
+            host = db_host,
             database=database
         )
         cursor = conn.cursor(dictionary=True)
@@ -390,8 +387,7 @@ def get_note(user_id):
         conn = mysql.connector.connect(
             user=db_user,
             password=db_pass,
-            #host = db_host,
-            host='127.0.0.1',
+            host = db_host,
             database=database
         )
         cursor = conn.cursor(dictionary=True)
@@ -439,8 +435,7 @@ def store_note(note, user_id):
         conn = mysql.connector.connect(
             user=db_user,
             password=db_pass,
-            #host = db_host,
-            host='127.0.0.1',
+            host = db_host,
             database=database
         )
         cursor = conn.cursor()
@@ -479,8 +474,7 @@ def get_tasks_report(user_name):
         conn = mysql.connector.connect(
         user=db_user,
         password=db_pass,
-        #host = db_host,
-        host='127.0.0.1',
+        host = db_host,
         database=database
         )
         
@@ -593,8 +587,7 @@ def get_tg_user(user_name):
         conn = mysql.connector.connect(
         user=db_user,
         password=db_pass,
-        #host = db_host,
-        host='127.0.0.1',
+        host = db_host,
         database=database
         )
         
