@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand
 from telegram.ext import Application, CommandHandler, CallbackContext, CallbackQueryHandler, MessageHandler, filters
 
@@ -400,7 +402,7 @@ async def callback():
 def start_flask_app(application):
     app.config['application_instance'] = application  # pass application instance to Flask
     app.run(host="0.0.0.0", port=8000, debug=True, use_reloader=False)
-
+    
 
 # bot initialization 
 def main():
