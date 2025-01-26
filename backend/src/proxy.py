@@ -5,7 +5,7 @@ proxy_app = Flask(__name__)
 
 @proxy_app.route('/callback', methods=['GET'])
 def callback():
-    url = "http://127.0.0.1:8000/callback"
+    url = "https://arska-sammaleen.eu.pythonanywhere.com/callback"
     params = request.args  
     headers = dict(request.headers)  # convert headers to a mutable dict
     response = requests.get(url, params=params, headers=headers) 
