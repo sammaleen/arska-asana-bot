@@ -9,7 +9,7 @@ from datetime import datetime
 from flask import Flask, request, jsonify
 import logging
 
-from services.oauth_service import gen_oauth_link, store_state, get_user_id, get_token
+from services.oauth_service import gen_oauth_link, store_oauth_data, get_oauth_data, get_token
 
 from services.asana_data import (get_user_name,
                                  get_user_data,
@@ -57,9 +57,12 @@ def redis_check():
 # /START command handler
 async def start_command(update: Update, context: CallbackContext):
     
+    user_id = update.effective_user.id
+    tg_user = update.effective_user.username
+    
     oauth_link, state = gen_oauth_link()  # generate oauth link
-    store_state(update.effective_user.id, state) # store the state in Redis along with user_id mapping
-    logger.info(f"user - {update.effective_user.id}, state - {state}")
+    store_oauth_data(user_id, tg_user, state) # store the state in Redis along with user_id mapping
+    logger.info(f"bot started by user: {user_id}/{tg_user}, state: {state}")
     
     keyboard = [[InlineKeyboardButton("Connect to Asana 🔑", url=oauth_link)]]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -94,9 +97,12 @@ async def start_command(update: Update, context: CallbackContext):
 # /CONNECT command handler
 async def connect_command(update: Update, context: CallbackContext):
     
+    user_id = update.effective_user.id
+    tg_user = update.effective_user.username
+    
     oauth_link, state = gen_oauth_link()  # generate oauth link
-    store_state(update.effective_user.id, state) # store the state in Redis along with user_id mapping
-    logger.info(f"auth for user: {update.effective_user.id}, state: {state}")
+    store_oauth_data(user_id, tg_user, state) # store the state in Redis along with user_id mapping
+    logger.info(f"auth process for user: {user_id}/{tg_user}, state: {state}")
     
     keyboard = [[InlineKeyboardButton("OAuth Link", url=oauth_link)]]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -298,25 +304,30 @@ async def post_init(application: Application) -> None:
 
 # OAuth callback route
 @ app.route("/callback", methods=["GET"])
+
 def callback():
     
     auth_code = request.args.get('code')
     res_state = request.args.get('state')
     logger.info(f"recieved callback, state: {res_state}, auth_code: {auth_code}")
     
-    # fetch the user_id associated with the state
-    user_id = get_user_id(res_state)
-    if not user_id:
-        logger.error(f"invalid/expired state - {res_state}")
+    # fetch oauth info, user_id associated with the state
+    user_oauth_data = get_oauth_data(res_state)
+    if not user_oauth_data:
+        logger.error(f"innvalid / expired state: {res_state}")
         return "Invalid / Expired state", 400
     
+    user_id = int(user_oauth_data["user_id"])
+    tg_user = user_oauth_data["tg_user"]
+    logger.info(f"valid state for user: {user_id}/{tg_user}")
+
     # exchange auth code for access token
     access_token = get_token(auth_code) 
     if not access_token:
         logger.error(f"failed exchange auth code for token for user: {user_id}")
         return "Auth failed: couldn't get access token", 400
         
-    # get asana user name 
+    # get asana user name via request to asana api
     user_name = get_user_name(access_token)  
     if not user_name:
         logger.error(f"failed to get asana user name for user: {user_id}")
@@ -334,7 +345,6 @@ def callback():
         }), 400
     
     # saving extracted data to DB/cache
-    tg_user = None
     data_saved = save_asana_data(user_name, user_gid, user_token, user_id, tg_user)
     if not data_saved:
         logger.error(f"failed to save data for user: {user_id}/{user_name}")
