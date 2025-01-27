@@ -36,7 +36,7 @@ def get_oauth_data(state):
     data = redis_client.hgetall(key)
     
     if data:
-        return {k.decode("utf-8"): v.decode("utf-8") for k, v in data.items()}  # convert bytes to str
+        return data
     return None
     
 # exchange auth_code for access_token
