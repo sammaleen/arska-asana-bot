@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-
+import asyncio
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand
 from telegram.ext import Application, CommandHandler, CallbackContext, CallbackQueryHandler, MessageHandler, filters
 
@@ -98,7 +98,7 @@ async def connect_command(update: Update, context: CallbackContext):
     
     oauth_link, state = gen_oauth_link()  # generate oauth link
     store_state(update.effective_user.id, state) # store the state in Redis along with user_id mapping
-    logger.info(f"auth for user - {update.effective_user.id}, state - {state}")
+    logger.info(f"auth for user: {update.effective_user.id}, state: {state}")
     
     keyboard = [[InlineKeyboardButton("OAuth Link", url=oauth_link)]]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -299,9 +299,8 @@ async def post_init(application: Application) -> None:
 
 
 # OAuth callback route
-@app.route('/callback', methods=['GET'])
 
-async def callback():
+async def callback_async():
     
     auth_code = request.args.get('code')
     res_state = request.args.get('state')
@@ -316,8 +315,8 @@ async def callback():
     
     # fetch tg username
     try:
-        application_instance = app.config['application_instance']
-        chat = await application_instance.bot.get_chat(user_id)
+        tg_app = app.config['application_instance']
+        chat = await tg_app.bot.get_chat(user_id)
         tg_user = chat.username
         logger.info(f"fetched TG username {tg_user} for user: {user_id}")
         
@@ -331,12 +330,14 @@ async def callback():
     if not access_token:
         logger.error(f"failed exchange auth code for token for user: {user_id}")
         auth_message = "`auth failed`\n`try to re-run /connect`"
+        return auth_message, 400
         
     user_name = get_user_name(access_token)  
     
     if not user_name:
         logger.error(f"failed to get user name for user: {user_id}")
         auth_message = "`auth failed`\n`try to re-run /connect`"
+        return auth_message, 400
     
     user_gid, user_token = get_user_data(user_name)
     
@@ -350,8 +351,8 @@ async def callback():
             )
         
         try:
-            application_instance = app.config['application_instance']
-            chat = await application_instance.bot.get_chat(user_id)
+            tg_app = app.config['application_instance']
+            chat = await tg_app.bot.get_chat(user_id)
             await chat.send_message(auth_message, parse_mode="Markdown")
             
         except Exception as err:
@@ -370,8 +371,8 @@ async def callback():
             "'please, retry /connect'"
         )
         try:
-            application_instance = app.config['application_instance']
-            chat = await application_instance.bot.get_chat(user_id)
+            tg_app = app.config['application_instance']
+            chat = await tg_app.bot.get_chat(user_id)
             await chat.send_message(auth_message, parse_mode="Markdown")
             
         except Exception as err:
@@ -387,8 +388,8 @@ async def callback():
     )
     
     try:
-        application_instance = app.config['application_instance']
-        chat = await application_instance.bot.get_chat(user_id)
+        tg_app = app.config['application_instance']
+        chat = await tg_app.bot.get_chat(user_id)
         await chat.send_message(auth_message, parse_mode="Markdown")
         
     except Exception as err:
@@ -396,37 +397,42 @@ async def callback():
 
     logger.info(f"token saved for user: {user_id}/{user_name}")
     return jsonify({"message": "auth successful", "user_name": user_name, "user_token": "present, saved"})
+   
     
-    
-# run flask app in a separate thread to handle OAuth callback
-def start_flask_app(application):
-    app.config['application_instance'] = application  # pass application instance to Flask
-    app.run(host="0.0.0.0", port=5000, debug=True, use_reloader=False)
+# synch entrypoint that calls async callback logic (for wsgi) 
+@app.route('/callback', methods=['GET'])    
+def callback_sync():
+    tg_app = app.config['application_instance']
+    loop = tg_app.bot._loop
+    future = asyncio.run_coroutine_threadsafe(callback_async(), loop)
+    return future.result()
     
 
 # bot initialization 
-def main():
+def create_bot_app():
     
-    application = Application.builder().token(bot_token).post_init(post_init).build()
+    bot_app = Application.builder().token(bot_token).post_init(post_init).build()
     
     # command handlers
-    application.add_handler(CommandHandler("start", start_command)) 
-    application.add_handler(CommandHandler("connect", connect_command)) 
-    application.add_handler(CommandHandler("mytasks", mytasks_command)) 
-    application.add_handler(CommandHandler("report", report_command)) 
+    bot_app.add_handler(CommandHandler("start", start_command)) 
+    bot_app.add_handler(CommandHandler("connect", connect_command)) 
+    bot_app.add_handler(CommandHandler("mytasks", mytasks_command)) 
+    bot_app.add_handler(CommandHandler("report", report_command)) 
     
     # callback handlers
-    application.add_handler(CallbackQueryHandler(add_notes_callback, pattern="add_notes"))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, note_input))
-    application.add_handler(CallbackQueryHandler(process_note, pattern="^(confirm_note|edit_note)$"))
+    bot_app.add_handler(CallbackQueryHandler(add_notes_callback, pattern="add_notes"))
+    bot_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, note_input))
+    bot_app.add_handler(CallbackQueryHandler(process_note, pattern="^(confirm_note|edit_note)$"))
     
-    # start flask app in a separate thread
-    flask_thread = threading.Thread(target=start_flask_app, args=(application,))
-    flask_thread.daemon = True
-    flask_thread.start()
+    return bot_app
 
-    # start bot
-    application.run_polling()
+# run bot polling
+def main():
+    
+    bot_app = create_bot_app()
+    app.config['application_instance'] = bot_app
+    
+    bot_app.run_polling()
 
 if __name__ == "__main__":
     main() 
