@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-import asyncio
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand
 from telegram.ext import Application, CommandHandler, CallbackContext, CallbackQueryHandler, MessageHandler, filters
 
@@ -8,7 +7,6 @@ from pathlib import Path
 from datetime import datetime
 
 from flask import Flask, request, jsonify
-import threading
 import logging
 
 from services.oauth_service import gen_oauth_link, store_state, get_user_id, get_token
@@ -299,115 +297,57 @@ async def post_init(application: Application) -> None:
 
 
 # OAuth callback route
-
-async def callback_async():
+@ app.route("/callback", methods=["GET"])
+def callback():
     
     auth_code = request.args.get('code')
     res_state = request.args.get('state')
-    
     logger.info(f"recieved callback, state: {res_state}, auth_code: {auth_code}")
-    user_id = get_user_id(res_state) # fetch the user_id associated with the state
     
+    # fetch the user_id associated with the state
+    user_id = get_user_id(res_state)
     if not user_id:
         logger.error(f"invalid/expired state - {res_state}")
         return "Invalid / Expired state", 400
-    logger.info(f"valid state for user - {user_id}")
-    
-    # fetch tg username
-    try:
-        tg_app = app.config['application_instance']
-        chat = await tg_app.bot.get_chat(user_id)
-        tg_user = chat.username
-        logger.info(f"fetched TG username {tg_user} for user: {user_id}")
-        
-    except Exception as err:
-        logger.error(f"failed to fetch TG username for user: {user_id}")
-        tg_user = None 
     
     # exchange auth code for access token
     access_token = get_token(auth_code) 
-
     if not access_token:
         logger.error(f"failed exchange auth code for token for user: {user_id}")
-        auth_message = "`auth failed`\n`try to re-run /connect`"
-        return auth_message, 400
+        return "Auth failed: couldn't get access token", 400
         
+    # get asana user name 
     user_name = get_user_name(access_token)  
-    
     if not user_name:
-        logger.error(f"failed to get user name for user: {user_id}")
-        auth_message = "`auth failed`\n`try to re-run /connect`"
-        return auth_message, 400
+        logger.error(f"failed to get asana user name for user: {user_id}")
+        return "Auth failed: user is not in Asana ", 400
     
+    # get permanent token from DB
     user_gid, user_token = get_user_data(user_name)
-    
     if not user_token:
-        logger.error(f"failed to get permanent token from db for user: {user_id}/{user_name}")
-        auth_message = (
-            "`auth successful`\n"
-            f"`user_name: {user_name}`\n"
-            "`user_token: missing\n\n`"
-            f"[Click here to set personal token 🡥]({gs_url})"
-            )
-        
-        try:
-            tg_app = app.config['application_instance']
-            chat = await tg_app.bot.get_chat(user_id)
-            await chat.send_message(auth_message, parse_mode="Markdown")
-            
-        except Exception as err:
-            logger.error(f"error sending message to user: {user_id}/{user_name}: {err}")
-        
-        return jsonify({"message": "auth successful", "user_token": "missing", "check this": gs_url}), 400
+        logger.error(f"failed to get permanent token from DB for user: {user_id}/{user_name}")
+        return jsonify({
+            "message": "auth successful, but personal token is missing",
+            "user_name": user_name,
+            "user_token": "missing",
+            "note":f"click here to get personal token {gs_url}"
+        }), 400
     
+    # saving extracted data to DB/cache
+    tg_user = None
     data_saved = save_asana_data(user_name, user_gid, user_token, user_id, tg_user)
-    
     if not data_saved:
-        logger.error(f"failed to save token for user: {user_id}/{user_name}")
-        auth_message = (
-            "`auth successful`\n"
-            f"`user_name: {user_name}`\n"
-            "`user_token: present, NOT saved (!)"
-            "'please, retry /connect'"
-        )
-        try:
-            tg_app = app.config['application_instance']
-            chat = await tg_app.bot.get_chat(user_id)
-            await chat.send_message(auth_message, parse_mode="Markdown")
-            
-        except Exception as err:
-            logger.error(f"error sending message to user: {user_id}/{user_name}: {err}")
-            
-        return jsonify({"message": "auth failed"}), 500
+        logger.error(f"failed to save data for user: {user_id}/{user_name}")
+        return jsonify({"message": "auth failed - couldn't save data in DB/cache"}), 500
     
-    # full success, token present and saved
-    auth_message = (
-        "`auth successful`\n"
-        f"`user_name: {user_name}`\n"
-        "`user_token: present, saved`"
-    )
-    
-    try:
-        tg_app = app.config['application_instance']
-        chat = await tg_app.bot.get_chat(user_id)
-        await chat.send_message(auth_message, parse_mode="Markdown")
-        
-    except Exception as err:
-        logger.error(f"error sending message to user: {user_id}/{user_name}: {err}")
-
-    logger.info(f"token saved for user: {user_id}/{user_name}")
-    return jsonify({"message": "auth successful", "user_name": user_name, "user_token": "present, saved"})
+    logger.info(f"data saved for user: {user_id}/{user_name}")
+    return jsonify({
+        "message": "auth successful",
+        "user_name": user_name,
+        "user_token": "present, saved"
+    }), 200
    
-    
-# synch entrypoint that calls async callback logic (for wsgi) 
-@app.route('/callback', methods=['GET'])    
-def callback_sync():
-    tg_app = app.config['application_instance']
-    loop = tg_app.bot._loop
-    future = asyncio.run_coroutine_threadsafe(callback_async(), loop)
-    return future.result()
-    
-
+   
 # bot initialization 
 def create_bot_app():
     
@@ -426,12 +366,10 @@ def create_bot_app():
     
     return bot_app
 
+
 # run bot polling
 def main():
-    
-    bot_app = create_bot_app()
-    app.config['application_instance'] = bot_app
-    
+    bot_app = create_bot_app()   
     bot_app.run_polling()
 
 if __name__ == "__main__":
