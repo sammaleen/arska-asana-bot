@@ -306,7 +306,7 @@ async def callback():
     auth_code = request.args.get('code')
     res_state = request.args.get('state')
     
-    logger.info(f"recieved callback, state - {res_state}")
+    logger.info(f"recieved callback, state: {res_state}, auth_code: {auth_code}")
     user_id = get_user_id(res_state) # fetch the user_id associated with the state
     
     if not user_id:
