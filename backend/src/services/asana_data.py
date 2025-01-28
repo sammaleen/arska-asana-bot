@@ -176,7 +176,7 @@ def get_redis_data(user_id):
             
             # update redis cache
             redis_data = {"user_gid": user_gid, "tg_user": tg_user, "user_name": user_name, "user_token": user_token}
-            redis_client.set(redis_key, json.dumps(redis_data), ex=token_ttl)
+            redis_client.set(redis_key, json.dumps(redis_data, ensure_ascii=False), ex=token_ttl)
             
             logger.info(f"user data retrieved from DB and cached in Redis for user: {user_id}/{user_name}")
             return user_gid, user_name, user_token, tg_user
