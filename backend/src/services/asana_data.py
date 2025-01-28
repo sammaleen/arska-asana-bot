@@ -296,7 +296,7 @@ def format_df(df, extra_note, max_len=None, max_note_len=None):
     
     for project, group in grouped_tasks:
         project_name = project if project else 'No project'
-        message += f"*{project_name}*\n"
+        message += f"━\n*{project_name}*\n"
         
         # reset idx, enumerate from 1
         for idx, row in enumerate(group.itertuples(), start=1):
@@ -505,7 +505,7 @@ def format_report(user_df, user, tg_user_name, max_len=None, max_note_len=None):
     
     for project, group in grouped_tasks:
         project_name = project if project else 'No project'
-        message += f"*{project_name}*\n"
+        message += f"━\n*{project_name}*\n"
         
         # reset idx, enumerate from 1
         for idx, row in enumerate(group.itertuples(), start=1):
