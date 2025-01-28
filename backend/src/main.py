@@ -344,7 +344,7 @@ def callback():
             "message": "auth successful, but personal token is missing",
             "user_name": user_name,
             "user_token": "missing",
-            "note":f"click here to get personal token {gs_url}"
+            "note":f"go here to get personal token {gs_url}"
         }), 400
     
     # saving extracted data to DB/cache
