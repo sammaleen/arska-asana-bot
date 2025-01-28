@@ -86,8 +86,11 @@ def save_asana_data(user_name, user_gid, user_token, user_id, tg_user):
     
     try:
         redis_key = f"user_data:{user_id}"
-        redis_data = {"user_gid": user_gid, "tg_user": tg_user, "user_name": user_name, "user_token": user_token}
-        redis_client.set(redis_key, json.dumps(redis_data), ex=token_ttl)
+        redis_data = {"user_gid": user_gid, 
+                      "tg_user": tg_user, 
+                      "user_name": user_name,
+                      "user_token": user_token}
+        redis_client.set(redis_key, json.dumps(redis_data, ensure_ascii=False), ex=token_ttl)
         
         conn = mysql.connector.connect(
             user=db_user,
