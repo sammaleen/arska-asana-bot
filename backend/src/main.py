@@ -243,7 +243,7 @@ async def process_note(update: Update, context: CallbackContext):
 
   
 # /REPORT command handler    
-async def report_command(update: Update, context: CallbackContext):
+async def report_command_(update: Update, context: CallbackContext):
     
     user_id = update.effective_user.id
     user_gid, user_name, user_token, tg_user = get_redis_data(user_id)
@@ -282,6 +282,48 @@ async def report_command(update: Update, context: CallbackContext):
             text = report_message,
             parse_mode="Markdown"
         )
+    
+# /REPORT command handler    
+async def report_command(update: Update, context: CallbackContext):
+    user_id = update.effective_user.id
+    user_gid, user_name, user_token, tg_user = get_redis_data(user_id)
+    
+    tasks_dict = get_tasks_report(user_name)
+    
+    if tasks_dict:
+        users = list(tasks_dict.keys())
+        mes_num = len(users)
+        logger.info(f"got report data for {mes_num} users: {users}")
+        
+        # create formatted reports for each user from tasks_dict
+        reports = []
+        for user, user_df in tasks_dict.items():
+            tg_user_name = get_tg_user(user)
+            user_report = format_report(user_df, user, tg_user_name, max_len=4000, max_note_len=150)
+            reports.append(user_report)
+        
+        # send each report as a separate message 
+        for report in reports:
+            try:
+                await context.bot.send_message(
+                    chat_id=update.effective_chat.id,
+                    text=report,
+                    parse_mode='HTML'  # Use HTML parse mode here
+                )   
+            except Exception as err:
+                logger.error(f"error sending report to user: {user_id}/{user_name}")
+    else:
+        report_message = (
+            f"<b>{datetime.now().strftime('%d %b %Y - %a')}</b>\n\n"
+            "`No data is present for now`"
+        )
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=report_message,
+            parse_mode="HTML"  # Use HTML parse mode here
+        )
+    
+    
     
     
 # MENU bot post initialization
