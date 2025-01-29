@@ -500,8 +500,7 @@ def format_report(user_df, user, tg_user_name, max_len=None, max_note_len=None):
     current_date = datetime.now().strftime("%d %b %Y · %a")
     
     if tg_user_name:
-        #message = f"*{user}* @{tg_user_name}\n{current_date}\n\n"
-        message = f"*{user}*\n{current_date}\n\n"
+        message = f"*{user}* `@{tg_user_name}`\n{current_date}\n\n"
     else:
         message = f"*{user}*\n{current_date}\n\n"
     
