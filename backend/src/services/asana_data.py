@@ -495,7 +495,7 @@ def get_tasks_report(user_name):
 
 
 # FORMAT report messages 
-def format_report(user_df, user, tg_user_name, max_len=None, max_note_len=None):
+def format_report_1(user_df, user, tg_user_name, max_len=None, max_note_len=None):
     current_date = datetime.now().strftime("%d %b %Y · %a")
     
     if tg_user_name:
@@ -535,6 +535,56 @@ def format_report(user_df, user, tg_user_name, max_len=None, max_note_len=None):
             extra_note = extra_note[:max_note_len - 3].rstrip() + " (...)"
         message += f"<b>✲ Note:</b>\n{extra_note}\n\n"
         
+    return message
+
+def format_report(user_df, user, tg_user_name, max_len=None, max_note_len=None):
+    current_date = datetime.now().strftime("%d %b %Y · %a")
+
+    # Start the message with HTML formatting
+    if tg_user_name:
+        message = f"<b>{user}</b> @{tg_user_name}\n{current_date}\n\n"
+    else:
+        message = f"<b>{user}</b>\n{current_date}\n\n"
+
+    grouped_tasks = user_df.groupby('project_name')  # group tasks by project
+
+    for project, group in grouped_tasks:
+        project_name = project if project else 'No project'
+        message += f"━\n<b>{project_name}</b>\n"
+
+        # Reset idx, enumerate from 1
+        for idx, row in enumerate(group.itertuples(), start=1):
+            task = row.task_name
+            url = row.url
+            notes = row.notes if row.notes else 'No additional notes'  # Default if no notes
+            due = row.due_on if row.due_on else 'No DL'
+
+            # Crop notes if they exceed max_note_len
+            if len(notes) > max_note_len:
+                notes = notes[:max_note_len - 3].rstrip() + " (...)"
+
+            # Escape special characters like * and _ for HTML formatting
+            task_escaped = task.replace("<", "&lt;").replace(">", "&gt;").replace("&", "&amp;")
+            url_escaped = url.replace("<", "&lt;").replace(">", "&gt;").replace("&", "&amp;")
+
+            task_entry = f"{idx}. <a href='{url_escaped}'>{task_escaped}</a> · <code>{due}</code>\n{notes}\n\n"
+            message += task_entry
+
+        message += "\n"
+
+    # Crop the entire message if it exceeds max_len
+    if max_len and len(message) > max_len:
+        message = message[:max_len].rstrip() + " (...)"
+
+    # Handle extra notes
+    if 'extra_note' in user_df.columns and not user_df['extra_note'].isnull().iloc[0]:
+        extra_note = user_df['extra_note'].iloc[0]
+
+        # Crop extra notes if they exceed max_note_len
+        if len(extra_note) > max_note_len:
+            extra_note = extra_note[:max_note_len - 3].rstrip() + " (...)"
+        message += f"<b>✲ Note:</b>\n{extra_note}\n\n"
+
     return message
 
 
