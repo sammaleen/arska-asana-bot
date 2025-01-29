@@ -495,50 +495,6 @@ def get_tasks_report(user_name):
 
 
 # FORMAT report messages 
-def format_report_(user_df, user, tg_user_name, max_len=None, max_note_len=None):
-    
-    current_date = datetime.now().strftime("%d %b %Y · %a")
-    
-    if tg_user_name:
-        message = f"*{user}* `@{tg_user_name}`\n{current_date}\n\n"
-    else:
-        message = f"*{user}*\n{current_date}\n\n"
-    
-    grouped_tasks = user_df.groupby('project_name') # group tasks by project
-    
-    for project, group in grouped_tasks:
-        project_name = project if project else 'No project'
-        message += f"━\n*{project_name}*\n"
-        
-        # reset idx, enumerate from 1
-        for idx, row in enumerate(group.itertuples(), start=1):
-            task = row.task_name
-            url = row.url
-            notes = row.notes if row.notes else '-'
-            due = row.due_on if row.due_on else 'No DL'
-
-            # crop notes if exceed max_note_len
-            if len(notes) > max_note_len:
-                notes = notes[:max_note_len - 3].rstrip() + " (...)"
-
-            task_entry = f"{idx}. [{task}]({url}) · `{due}`\n{notes}\n\n"
-            message += task_entry
-
-        message += "\n" 
-
-    if max_len and len(message) > max_len:
-        message = message[:max_len].rstrip() + " (...)"
-
-    if 'extra_note' in user_df.columns and not user_df['extra_note'].isnull().iloc[0]: 
-        extra_note = user_df['extra_note'].iloc[0]  
-        
-        if len(extra_note) > max_note_len:
-            extra_note = extra_note[:max_note_len - 3].rstrip() + " (...)"
-        message += f"*✲\nNote:*\n{extra_note}\n\n"
-        
-    return message
-
-
 def format_report(user_df, user, tg_user_name, max_len=None, max_note_len=None):
     current_date = datetime.now().strftime("%d %b %Y · %a")
     
@@ -560,9 +516,9 @@ def format_report(user_df, user, tg_user_name, max_len=None, max_note_len=None):
             notes = row.notes if row.notes else '-'
             due = row.due_on if row.due_on else 'No DL'
 
-            # Escape special characters in task names and URLs (like underscores)
-            task_escaped = task.replace("_", "\\_").replace("*", "\\*")  # Escape _ and *
-            url_escaped = url.replace("_", "\\_").replace("*", "\\*")  # Escape _ and *
+            # escape special characters 
+            task_escaped = task.replace("_", "\\_").replace("*", "\\*")  
+            url_escaped = url.replace("_", "\\_").replace("*", "\\*")  
 
             task_entry = f"{idx}. <a href='{url_escaped}'>{task_escaped}</a> · <code>{due}</code>\n{notes}\n\n"
             message += task_entry
@@ -580,8 +536,6 @@ def format_report(user_df, user, tg_user_name, max_len=None, max_note_len=None):
         message += f"<b>✲ Note:</b>\n{extra_note}\n\n"
         
     return message
-
-
 
 
 #GET TG USER
@@ -614,7 +568,6 @@ def get_tg_user(user_name):
         
         if result:
             tg_user_name = result['tg_user']
-            logger.info(f"TG username {tg_user_name} retrieved from DB for user: {user_name}")
             return tg_user_name
         return None
         
