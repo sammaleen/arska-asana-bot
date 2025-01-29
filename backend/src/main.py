@@ -336,6 +336,9 @@ def callback():
         logger.error(f"failed to get asana user name for user: {user_id}")
         return "Auth failed: user is not in Asana ", 400
     
+    # decode cyrillic 
+    user_name = user_name.encode('utf-8').decode('unicode_escape')
+    
     # get permanent token from DB
     user_gid, user_token = get_user_data(user_name)
     if not user_token:
@@ -344,7 +347,7 @@ def callback():
             "message": "auth successful, but personal token is missing",
             "user_name": user_name,
             "user_token": "missing",
-            "note":f"go here to get personal token {gs_url}"
+            "note":f"please, go here to get personal token {gs_url}"
         }), 400
     
     # saving extracted data to DB/cache
