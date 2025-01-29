@@ -542,9 +542,8 @@ def format_report_(user_df, user, tg_user_name, max_len=None, max_note_len=None)
 def format_report(user_df, user, tg_user_name, max_len=None, max_note_len=None):
     current_date = datetime.now().strftime("%d %b %Y · %a")
     
-    # Format the message with HTML instead of Markdown
     if tg_user_name:
-        message = f"<b>{user}</b> <a href='tg://user?id={tg_user_name}'>{tg_user_name}</a>\n{current_date}\n\n"
+        message = f"<b>{user}</b> @{tg_user_name}\n{current_date}\n\n"
     else:
         message = f"<b>{user}</b>\n{current_date}\n\n"
     
