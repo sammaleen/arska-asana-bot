@@ -129,7 +129,7 @@ async def mytasks_command(update: Update, context: CallbackContext):
     else:
         mytasks_message = (
             f"*{datetime.now().strftime('%d %b %Y · %a')}*\n\n"
-            "`No task for today`"
+            "`No tasks for today`"
         )
     
     await context.bot.send_photo(
@@ -253,8 +253,7 @@ async def report_command(update: Update, context: CallbackContext):
     if tasks_dict:
         users = list(tasks_dict.keys())
         mes_num = len(users)
-        
-        logger.info(f"got report data for {mes_num} users")
+        logger.info(f"got report data for {mes_num} users: {users}")
         
         # create formatted reports for each user from tasks_dict
         reports = []
@@ -271,7 +270,6 @@ async def report_command(update: Update, context: CallbackContext):
                     text=report,
                     parse_mode='Markdown'
                 )   
-                logger.info(f"report sent to user: {user_id}/{user_name}")
             except Exception as err:
                 logger.error(f"error sending report to user: {user_id}/{user_name}")
     else:

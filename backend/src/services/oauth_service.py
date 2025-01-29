@@ -24,11 +24,11 @@ def gen_oauth_link():
     
     return oauth_link, state
 
-# store oauth data in redis for 20 mins
+# store oauth data in redis for 10 mins
 def store_oauth_data(user_id, tg_user, state):
     key = f'oauth_state:{state}'
     redis_client.hset(key, mapping={"user_id": user_id, "tg_user": tg_user})
-    redis_client.expire(key, 1200)
+    redis_client.expire(key, 600)
     
 # get user_id and user_tg from redis using the state
 def get_oauth_data(state):
