@@ -99,15 +99,19 @@ def save_asana_data(user_name, user_gid, user_token, user_id, tg_user):
             database=database
         )
         cursor = conn.cursor()
-        
+    
         cursor.execute(
             """
             INSERT INTO bot (user_id, tg_user, user_name, user_token, user_gid, date_added)
             VALUES (%s, %s, %s, %s, %s, %s)
             ON DUPLICATE KEY UPDATE
-            tg_user = VALUES(tg_user), user_name = VALUES(user_name), user_token = VALUES(user_token), date_added = VALUES(date_added)
+            tg_user = %s,
+            user_name = %s,
+            user_token = %s,
+            date_added = %s
             """,
-            (user_id, tg_user, user_name, user_token, user_gid, date.today())
+            (user_id, tg_user, user_name, user_token, user_gid, date.today(),
+            tg_user, user_name, user_token, date.today())
         )
         conn.commit()
         
