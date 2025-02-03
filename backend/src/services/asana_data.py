@@ -212,7 +212,7 @@ def get_tasks(user_id, workspace_gid):
         logging.error(f"unable to retrieve Asana creds for user: {user_id}")
         return pd.DataFrame()
     
-    #get list gid for my tasks board
+    # get list from asana
     url = f"https://app.asana.com/api/1.0/users/{user_gid}/user_task_list"
     headers = {'Authorization': f'Bearer {user_token}'}
     
@@ -281,7 +281,7 @@ def get_tasks(user_id, workspace_gid):
             my_tasks_df['project_name'] = my_tasks_df['project_name'].apply(
                 lambda x: x[0]['name'] if isinstance(x, list) and x else '')
         
-        #re-order columns
+        # re-order columns
         my_tasks_df.drop('task_gid', axis=1, inplace=True)
         my_tasks_df['idx'] = (my_tasks_df.index + 1).tolist()  
         order = ['idx','project_name','task_name','due_on','notes','url']
@@ -294,7 +294,7 @@ def get_tasks(user_id, workspace_gid):
 
 
 # FORMAT mytasks message
-def format_df(df, extra_note, max_len=None, max_note_len=None):
+def format_df2(df, extra_note, max_len=None, max_note_len=None):
     
     current_date = datetime.now().strftime("%d %b %Y · %a")
     message = f"*{current_date}*\n\n"
@@ -332,7 +332,55 @@ def format_df(df, extra_note, max_len=None, max_note_len=None):
     if extra_note:
         if len(extra_note) > max_note_len:
             extra_note = extra_note[:max_note_len - 3].rstrip() + " (...)"
-        message += f"*✲Note:*\n{extra_note}\n\n"
+        message += f"*✲ Note:*\n{extra_note}\n\n"
+        
+    return message
+
+
+def format_df(df, extra_note, max_len=None, max_note_len=None):
+    
+    current_date = datetime.now().strftime("%d %b %Y · %a")
+    message = f"*{current_date}*\n\n"
+    
+    grouped_tasks = df.groupby('project_name')  # group tasks by project
+    
+    for project, group in grouped_tasks:
+        project_name = project if project else 'No project'
+        message += f"━\n*{project_name}*\n"
+        
+        # sort tasks based on due data
+        sorted_group = sorted(
+            group.itertuples(),
+            key=lambda row: datetime.strptime(row.due_on, '%Y-%m-%d') if row.due_on else datetime.max
+        )
+        
+        for idx, row in enumerate(sorted_group, start=1):
+            task = row.task_name
+            url = row.url
+            notes = row.notes if row.notes else '-'
+            due = row.due_on if row.due_on else 'No DL'
+            
+            # crop notes if they exceed max_note_len
+            if len(notes) > max_note_len:
+                notes = notes[:max_note_len - 3].rstrip() + " (...)"
+            
+            # format due date
+            if due != 'No DL':
+                due_date = datetime.strptime(due, '%Y-%m-%d')
+                due = due_date.strftime("%d-%m-%Y")
+            
+            task_entry = f"{idx}. [{task}]({url}) · `{due}`\n{notes}\n\n"
+            message += task_entry
+
+        message += "\n" 
+
+    if max_len and len(message) > max_len:
+        message = message[:max_len].rstrip() + " (...)"
+
+    if extra_note:
+        if len(extra_note) > max_note_len:
+            extra_note = extra_note[:max_note_len - 3].rstrip() + " (...)"
+        message += f"*✲ Note:*\n{extra_note}\n\n"
         
     return message
 

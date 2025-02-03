@@ -273,7 +273,7 @@ async def report_command(update: Update, context: CallbackContext):
                 logger.error(f"error sending report to user: {user_id}/{user_name}")
     else:
         report_message = (
-            f"<b>{datetime.now().strftime('%d %b %Y - %a')}</b>\n\n"
+            f"<b>{datetime.now().strftime('%d %b %Y · %a')}</b>\n\n" 
             "`No data is present for now`"
         )
         await context.bot.send_message(
