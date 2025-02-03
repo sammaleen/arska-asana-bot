@@ -564,8 +564,8 @@ def format_report(user_df, user, tg_user_name, max_len=None, max_note_len=None):
         # sort tasks on due date
         sorted_group = sorted(
             group.itertuples(),
-            key=lambda row: datetime.strptime(row.due_on, '%d-%m-%Y') if row.due_on else datetime.max
-            )
+            key=lambda row: datetime.strptime(row.due_on, '%d-%m-%Y') if row.due_on and row.due_on != 'No DL' else datetime.max
+        )
 
         # reset idx, enumerate from 1
         for idx, row in enumerate(sorted_group, start=1):
