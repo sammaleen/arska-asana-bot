@@ -129,7 +129,7 @@ async def mytasks_command(update: Update, context: CallbackContext):
     else:
         mytasks_message = (
             f"<b>{datetime.now().strftime('%d %b %Y · %a')}</b>\n\n"
-            "<tt>No tasks for today</tt>"
+            "<code>No tasks for today</code>"
         )
     
     await context.bot.send_photo(
@@ -274,7 +274,7 @@ async def report_command(update: Update, context: CallbackContext):
     else:
         report_message = (
             f"<b>{datetime.now().strftime('%d %b %Y · %a')}</b>\n\n" 
-            "<tt>No data is present for now</tt>"
+            "<code>No data is present for now</code>"
         )
         await context.bot.send_message(
             chat_id=update.effective_chat.id,
