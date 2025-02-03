@@ -342,7 +342,7 @@ def format_df2(df, extra_note, max_len=None, max_note_len=None):
     return message
 
 # for html 
-def format_df2(df, extra_note, max_len=None, max_note_len=None):
+def format_df(df, extra_note, max_len=None, max_note_len=None):
     
     current_date = datetime.now().strftime("%d %b %Y · %a")
     message = f"<b>{current_date}</b>\n\n"
