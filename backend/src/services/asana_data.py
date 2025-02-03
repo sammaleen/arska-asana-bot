@@ -299,49 +299,6 @@ def format_df2(df, extra_note, max_len=None, max_note_len=None):
     current_date = datetime.now().strftime("%d %b %Y · %a")
     message = f"*{current_date}*\n\n"
     
-    grouped_tasks = df.groupby('project_name') # group tasks by project
-    
-    for project, group in grouped_tasks:
-        project_name = project if project else 'No project'
-        message += f"━\n*{project_name}*\n"
-        
-        # reset idx, enumerate from 1
-        for idx, row in enumerate(group.itertuples(), start=1):
-            task = row.task_name
-            url = row.url
-            notes = row.notes if row.notes else '-'
-            due = row.due_on if row.due_on else 'No DL'
-
-            # crop notes if exceed max_note_len
-            if len(notes) > max_note_len:
-                notes = notes[:max_note_len - 3].rstrip() + " (...)"
-            
-            # format due date
-            if due != 'No DL':
-                due_date = datetime.strptime(due,'%Y-%m-%d')
-                due = due_date.strftime("%d-%m-%Y")
-
-            task_entry = f"{idx}. [{task}]({url}) · `{due}`\n{notes}\n\n"
-            message += task_entry
-
-        message += "\n" 
-
-    if max_len and len(message) > max_len:
-        message = message[:max_len].rstrip() + " (...)"
-
-    if extra_note:
-        if len(extra_note) > max_note_len:
-            extra_note = extra_note[:max_note_len - 3].rstrip() + " (...)"
-        message += f"*✲ Note:*\n{extra_note}\n\n"
-        
-    return message
-
-
-def format_df(df, extra_note, max_len=None, max_note_len=None):
-    
-    current_date = datetime.now().strftime("%d %b %Y · %a")
-    message = f"*{current_date}*\n\n"
-    
     grouped_tasks = df.groupby('project_name')  # group tasks by project
     
     for project, group in grouped_tasks:
@@ -384,6 +341,57 @@ def format_df(df, extra_note, max_len=None, max_note_len=None):
         
     return message
 
+# for html 
+def format_df2(df, extra_note, max_len=None, max_note_len=None):
+    
+    current_date = datetime.now().strftime("%d %b %Y · %a")
+    message = f"<b>{current_date}</b>\n\n"
+    
+    grouped_tasks = df.groupby('project_name')  # group tasks by project
+    
+    for project, group in grouped_tasks:
+        project_name = project if project else 'No project'
+        message += f"━\n<b>{project_name}</b>\n"
+        
+        # sort tasks based on due data
+        sorted_group = sorted(
+            group.itertuples(),
+            key=lambda row: datetime.strptime(row.due_on, '%Y-%m-%d') if row.due_on else datetime.max
+        )
+        
+        for idx, row in enumerate(sorted_group, start=1):
+            task = row.task_name
+            url = row.url
+            notes = row.notes if row.notes else '-'
+            due = row.due_on if row.due_on else 'No DL'
+            
+            # crop notes if they exceed max_note_len
+            if len(notes) > max_note_len:
+                notes = notes[:max_note_len - 3].rstrip() + " (...)"
+            
+            # escape special characters for HTML formatting
+            task_escaped = task.replace("<", "&lt;").replace(">", "&gt;").replace("&", "&amp;")
+            url_escaped = url.replace("<", "&lt;").replace(">", "&gt;").replace("&", "&amp;")
+            
+            # format due date
+            if due != 'No DL':
+                due_date = datetime.strptime(due, '%Y-%m-%d')
+                due = due_date.strftime("%d-%m-%Y")
+            
+            task_entry = f"{idx}. <a href='{url_escaped}'>{task_escaped}</a> · <code>{due}</code>\n{notes}\n\n"
+            message += task_entry
+
+        message += "\n" 
+
+    if max_len and len(message) > max_len:
+        message = message[:max_len].rstrip() + " (...)"
+
+    if extra_note:
+        if len(extra_note) > max_note_len:
+            extra_note = extra_note[:max_note_len - 3].rstrip() + " (...)"
+        message += f"<b>✲ Note:</b>\n{extra_note}\n\n"
+        
+    return message
 
 # CHECK NOTES from 'notes' bd
 def get_note(user_id):

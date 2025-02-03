@@ -128,15 +128,15 @@ async def mytasks_command(update: Update, context: CallbackContext):
         mytasks_message = format_df(df, extra_note, max_len=1024, max_note_len=100)
     else:
         mytasks_message = (
-            f"*{datetime.now().strftime('%d %b %Y · %a')}*\n\n"
-            "`No tasks for today`"
+            f"<b>{datetime.now().strftime('%d %b %Y · %a')}</b>\n\n"
+            "<tt>No tasks for today</tt>"
         )
     
     await context.bot.send_photo(
         chat_id=update.effective_chat.id,
         photo=open(Path(__file__).parent / "assets/mytasks.png", "rb"),
         caption=mytasks_message,
-        parse_mode="Markdown",
+        parse_mode="HTML",
         reply_markup=reply_markup
     )
  
@@ -274,7 +274,7 @@ async def report_command(update: Update, context: CallbackContext):
     else:
         report_message = (
             f"<b>{datetime.now().strftime('%d %b %Y · %a')}</b>\n\n" 
-            "`No data is present for now`"
+            "<tt>No data is present for now</tt>"
         )
         await context.bot.send_message(
             chat_id=update.effective_chat.id,
