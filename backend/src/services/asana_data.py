@@ -288,6 +288,8 @@ def get_tasks(user_id, workspace_gid):
         order = ['idx','project_name','task_name','due_on','notes','url']
         my_tasks_df = my_tasks_df[order]
         
+        logging.info(f"mytasks data retrieved for user: {user_name}")
+        
     else:
         my_tasks_df = pd.DataFrame() 
         
