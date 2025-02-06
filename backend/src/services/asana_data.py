@@ -165,7 +165,7 @@ def get_redis_data(user_id):
         cursor = conn.cursor(dictionary=True)
         
         cursor.execute("""
-                       ELECT tg_user, user_name, user_token, user_gid 
+                       SELECT tg_user, user_name, user_token, user_gid 
                        FROM bot 
                        WHERE user_id = %s
                        """,
