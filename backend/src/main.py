@@ -125,7 +125,7 @@ async def mytasks_command(update: Update, context: CallbackContext):
     extra_note = get_note(user_id)
     
     if not df.empty: 
-        mytasks_message = format_df(df, extra_note, max_len=1024, max_note_len=100)
+        mytasks_message = format_df(df, extra_note, max_len=1000, max_note_len=100)
     else:
         mytasks_message = (
             f"<b>{datetime.now().strftime('%d %b %Y · %a')}</b>\n\n"
