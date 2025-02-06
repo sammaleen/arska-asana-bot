@@ -381,7 +381,7 @@ def format_df(df, extra_note, max_len=None, max_note_len=None):
                 due_date = datetime.strptime(due, '%Y-%m-%d')
                 due = due_date.strftime("%d-%m-%Y")
             
-            task_entry = f"{idx}. <a href='{url_escaped}'>{task_escaped}</a> · <code>{due}</code>\n{notes}\n\n"
+            task_entry = f'{idx}. <a href="{url_escaped}">{task_escaped}</a> · <code>{due}</code>\n{notes}\n\n'
             message += task_entry
 
         message += "\n" 
