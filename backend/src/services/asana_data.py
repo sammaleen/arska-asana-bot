@@ -1,5 +1,6 @@
 import requests
 import json
+import html
 import mysql.connector
 import redis
 import redis.exceptions
@@ -397,7 +398,7 @@ def format_df_(df, extra_note, max_len=None, max_note_len=None):
     return message
 
 
-def format_df(df, extra_note, max_len=None, max_note_len=None):
+def format_df__(df, extra_note, max_len=None, max_note_len=None):
     current_date = datetime.now().strftime("%d %b %Y · %a")
     message = f"<b>{current_date}</b>\n\n"
     
@@ -451,6 +452,64 @@ def format_df(df, extra_note, max_len=None, max_note_len=None):
         message += f"<b>✲ Note:</b>\n{extra_note_escaped}\n\n"
         
     return message
+
+def format_df(df, extra_note, max_len=None, max_note_len=None):
+    current_date = datetime.now().strftime("%d %b %Y · %a")
+    message = f"<b>{current_date}</b>\n\n"
+    
+    grouped_tasks = df.groupby('project_name')
+    
+    for project, group in grouped_tasks:
+        # Escape project name first
+        project_name = project if project else 'No project'
+        project_escaped = html.escape(project_name)
+        message += f"━\n<b>{project_escaped}</b>\n"
+        
+        # Sort tasks
+        sorted_group = sorted(
+            group.itertuples(),
+            key=lambda row: datetime.strptime(row.due_on, '%Y-%m-%d') if row.due_on else datetime.max
+        )
+        
+        for idx, row in enumerate(sorted_group, start=1):
+            # Escape all fields before processing
+            task_escaped = html.escape(row.task_name)
+            url_escaped = html.escape(row.url)
+            notes = html.escape(row.notes) if row.notes else '-'
+            due = html.escape(row.due_on) if row.due_on else 'No DL'
+
+            # Format due date
+            if due != 'No DL':
+                due_date = datetime.strptime(due, '%Y-%m-%d')
+                due = due_date.strftime("%d-%m-%Y")
+            
+            # Truncate notes after escaping
+            if max_note_len and len(notes) > max_note_len:
+                notes = notes[:max_note_len - 3].rstrip() + " (...)"
+            
+            task_entry = f'{idx}. <a href="{url_escaped}">{task_escaped}</a> · <code>{due}</code>\n{notes}\n\n'
+            message += task_entry
+
+        message += "\n"
+
+    # Truncate final message more carefully
+    if max_len and len(message) > max_len:
+        # Find the last valid closing tag
+        safe_cut = message.rfind('</a>', 0, max_len)
+        if safe_cut != -1:
+            message = message[:safe_cut+4] + " (...)"
+        else:
+            message = message[:max_len].rstrip() + " (...)"
+
+    # Handle extra note
+    if extra_note:
+        extra_escaped = html.escape(extra_note)
+        if max_note_len and len(extra_escaped) > max_note_len:
+            extra_escaped = extra_escaped[:max_note_len - 3].rstrip() + " (...)"
+        message += f"<b>✲ Note:</b>\n{extra_escaped}\n\n"
+        
+    return message
+
 
 # CHECK NOTES from 'notes' bd
 def get_note(user_id):
