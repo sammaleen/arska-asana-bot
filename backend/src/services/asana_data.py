@@ -274,8 +274,8 @@ def get_tasks(user_id, workspace_gid):
     
         # SECTION NAME = TODAY или СЕГОДНЯ
         my_tasks_df = my_tasks_df[(my_tasks_df['assignee_section.name'].str.lower() == 'today') 
-                                  | (my_tasks_df['assignee_section.name'].str.lower() == 'сегодня')
-                                  | (my_tasks_df['assignee_section.name'].str.lower() == 'фокус')]
+                                  | (my_tasks_df['assignee_section.name'].str.lower() == 'сегодня')]
+                                  #| (my_tasks_df['assignee_section.name'].str.lower() == 'фокус')]
         
         # extracting project names from nested list []
         if 'project_name' in my_tasks_df.columns:
