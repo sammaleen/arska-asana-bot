@@ -258,7 +258,7 @@ async def report_command(update: Update, context: CallbackContext):
         reports = []
         for user, user_df in tasks_dict.items():
             tg_user_name = get_tg_user(user)
-            user_report = format_report(user_df, user, tg_user_name, max_len=4000, max_note_len=150)
+            user_report = format_report(user_df, user, tg_user_name, max_len=4000, max_note_len=100)
             reports.append(user_report)
         
         # send each report as a separate message 
