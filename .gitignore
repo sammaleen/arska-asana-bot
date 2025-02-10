@@ -1,6 +1,6 @@
 .env
 credentials.json  
-node_modules/
+users_to_skip.json
 
 .ipynb_checkpoints
 asana_bot.ipynb

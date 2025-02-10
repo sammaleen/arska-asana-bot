@@ -7,8 +7,7 @@ import redis.exceptions
 import pandas as pd
 from datetime import datetime, date
 
-
-from config.load_env import db_user, db_host, db_pass, database, token_ttl
+from config.load_env import db_user, db_host, db_pass, database, token_ttl, pm_users, ba_users
 
 import logging
 logger = logging.getLogger(__name__)
@@ -39,6 +38,7 @@ def get_user_name(access_token):
     except requests.exceptions.RequestException as err:
         logging.error(f"network errror: {err} trying fetching Asana username")
         return None
+    
     
 # GET PERSONAL TOKEN AND GID from db 'users'
 def get_user_data(user_name):
@@ -303,19 +303,19 @@ def format_df(df, extra_note, max_len=None, max_note_len=None):
     grouped_tasks = df.groupby('project_name')
     
     for project, group in grouped_tasks:
-        # Escape project name first
+        # escape project name first
         project_name = project if project else 'No project'
         project_escaped = html.escape(project_name)
         message += f"━\n<b>{project_escaped}</b>\n"
         
-        # Sort tasks
+        # sort tasks
         sorted_group = sorted(
             group.itertuples(),
             key=lambda row: datetime.strptime(row.due_on, '%Y-%m-%d') if row.due_on else datetime.max
         )
         
         for idx, row in enumerate(sorted_group, start=1):
-            # Escape all fields before processing
+            # escape all fields before processing
             task_escaped = html.escape(row.task_name)
             url_escaped = html.escape(row.url)
             notes = html.escape(row.notes) if row.notes else '-'
@@ -335,16 +335,16 @@ def format_df(df, extra_note, max_len=None, max_note_len=None):
 
         message += "\n"
 
-    # Truncate final message more carefully
+    # truncate final message more carefully
     if max_len and len(message) > max_len:
-        # Find the last valid closing tag
+        # find the last valid closing tag
         safe_cut = message.rfind('</a>', 0, max_len)
         if safe_cut != -1:
             message = message[:safe_cut+4] + " (...)"
         else:
             message = message[:max_len].rstrip() + " (...)"
 
-    # Handle extra note
+    # handle extra note
     if extra_note:
         extra_escaped = html.escape(extra_note)
         if max_note_len and len(extra_escaped) > max_note_len:
@@ -449,7 +449,9 @@ def store_note(note, user_id):
         
          
 # GET TASKS FROM DB + CHECK NOTES for additions
-def get_tasks_report(user_name):
+def get_report(user_name, pm_users, ba_users):
+    
+    skip_users = pm_users + ba_users
     
     conn = None
         
@@ -486,6 +488,159 @@ def get_tasks_report(user_name):
         notes_df = pd.read_sql(notes_query, conn, params=params)
         
         logger.info(f"report data fetched for user: {user_name}")
+                
+        # form tasks_dict
+        tasks_dict = {}
+        
+        if tasks_df is not None and not tasks_df.empty and notes_df is not None:
+            users = tasks_df['user_name'].unique().tolist()
+            
+            for user in users:
+                if user in skip_users:
+                    continue 
+                
+                user_tasks = tasks_df[tasks_df['user_name'] == user]
+                user_notes = notes_df[notes_df['user_name'] == user] if not notes_df.empty else None
+                
+                if user_notes is not None and not user_notes.empty:
+                    user_tasks.loc[:, 'extra_note'] = user_notes['note'].iloc[0]
+                else:
+                    user_tasks.loc[:, 'extra_note'] = None
+                    
+                tasks_dict[user] = user_tasks.reset_index(drop=True)      
+                
+        return tasks_dict
+            
+    except mysql.connector.Error as err:
+        logger.error(f"DB error: {err}")
+        return None
+    
+    finally:
+        if conn is not None:
+            conn.close()
+
+
+# REPORT FOR PM
+def get_report_pm(user_name, pm_users):
+    
+    if not pm_users:
+        logger.info("PM users list is empty")
+        return None
+        
+    conn = None
+        
+    try:
+        conn = mysql.connector.connect(
+        user=db_user,
+        password=db_pass,
+        host = db_host,
+        database=database
+        )
+        
+        pm_user_names = ', '.join(['%s'] * len(pm_users))
+        
+        # tasks data
+        tasks_query = (
+            f"""
+            SELECT project_name, user_name, task_name, due_on, notes, url
+            FROM tasks 
+            WHERE date_extracted = %s
+            AND user_name IN ({pm_user_names})
+            """
+            )
+        params = (date.today(),) + tuple(pm_users)
+        tasks_df = pd.read_sql(tasks_query, conn, params=params)
+        
+        tasks_df['due_on'] = pd.to_datetime(tasks_df['due_on'], errors='coerce').dt.date
+        tasks_df['due_on'] = tasks_df['due_on'].apply(lambda x: x.strftime("%d-%m-%Y") if pd.notnull(x) else "No DL")
+        
+        # notes data
+        notes_query = (
+            f"""
+            SELECT user_name, note
+            FROM notes
+            WHERE date_added = %s
+            AND user_name IN ({pm_user_names})
+            """
+            )
+        notes_df = pd.read_sql(notes_query, conn, params=params)
+        
+        logger.info(f"PM report data fetched for user: {user_name}")
+                
+        # form tasks_dict
+        tasks_dict = {}
+        
+        if tasks_df is not None and not tasks_df.empty and notes_df is not None:
+            users = tasks_df['user_name'].unique().tolist()
+            
+            for user in users:
+                user_tasks = tasks_df[tasks_df['user_name'] == user]
+                user_notes = notes_df[notes_df['user_name'] == user] if not notes_df.empty else None
+                
+                if user_notes is not None and not user_notes.empty:
+                    user_tasks.loc[:, 'extra_note'] = user_notes['note'].iloc[0]
+                else:
+                    user_tasks.loc[:, 'extra_note'] = None
+                    
+                tasks_dict[user] = user_tasks.reset_index(drop=True)      
+                
+        return tasks_dict
+            
+    except mysql.connector.Error as err:
+        logger.error(f"DB error: {err}")
+        return None
+    
+    finally:
+        if conn is not None:
+            conn.close()
+
+
+# REPORT FOR BA
+def get_report_ba(user_name, ba_users):
+        
+    if not ba_users:
+        logger.info("BA users list is empty")
+        return None
+        
+    conn = None
+        
+    try:
+        conn = mysql.connector.connect(
+        user=db_user,
+        password=db_pass,
+        host = db_host,
+        database=database
+        )
+        
+        ba_user_names = ', '.join(['%s'] * len(ba_users))
+        
+        # tasks data
+        tasks_query = (
+            f"""
+            SELECT project_name, user_name, task_name, due_on, notes, url
+            FROM tasks 
+            WHERE date_extracted = %s
+            AND user_name IN ({ba_user_names})
+            """
+            )
+        params = (date.today(),) + tuple(ba_users)
+        tasks_df = pd.read_sql(tasks_query, conn, params=params)
+        
+        tasks_df['due_on'] = pd.to_datetime(tasks_df['due_on'], errors='coerce').dt.date
+        tasks_df['due_on'] = tasks_df['due_on'].apply(lambda x: x.strftime("%d-%m-%Y") if pd.notnull(x) else "No DL")
+        
+        # notes data
+        notes_query = (
+            f"""
+            SELECT user_name, note
+            FROM notes
+            WHERE date_added = %s
+            AND user_name IN ({ba_user_names})
+            """
+            )
+        notes_df = pd.read_sql(notes_query, conn, params=params)
+        
+        logger.info(f"BA report data fetched for user: {user_name}")
                 
         # form tasks_dict
         tasks_dict = {}

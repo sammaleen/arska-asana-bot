@@ -9,6 +9,8 @@ from datetime import datetime, time
 from flask import Flask, request, jsonify
 import logging
 
+from services.redis_client import get_redis_client
+
 from services.oauth_service import gen_oauth_link, store_oauth_data, get_oauth_data, get_token
 
 from services.asana_data import (get_user_name,
@@ -19,13 +21,20 @@ from services.asana_data import (get_user_name,
                                  get_note,
                                  format_df, 
                                  store_note,
-                                 get_tasks_report,
+                                 get_report,
+                                 get_report_pm,
+                                 get_report_ba,
                                  get_tg_user,
                                  format_report
                                  )
 
-from services.redis_client import get_redis_client
-from config.load_env import bot_token, workspace_gid, gs_url, report_chat_id
+from config.load_env import (bot_token,
+                             workspace_gid,
+                             gs_url,
+                             report_chat_id, 
+                             report_chat_id_pm, 
+                             report_chat_id_ba
+                             )
 
 # set logger 
 logging.basicConfig(
@@ -38,7 +47,7 @@ logger = logging.getLogger(__name__)
 # set flask
 app = Flask(__name__)
 
-# COMMANDS ---
+# COMMANDS ------
 
 # /CHATID command handler
 async def chat_id_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -238,7 +247,7 @@ async def report_command(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
     user_gid, user_name, user_token, tg_user = get_redis_data(user_id)
     
-    tasks_dict = get_tasks_report(user_name)
+    tasks_dict = get_report(user_name)
     
     if tasks_dict:
         users = list(tasks_dict.keys())
@@ -274,6 +283,88 @@ async def report_command(update: Update, context: CallbackContext):
         )
     
     
+# /PM REPORT command handler    
+async def pm_report_command(update: Update, context: CallbackContext):
+    user_id = update.effective_user.id
+    user_gid, user_name, user_token, tg_user = get_redis_data(user_id)
+    
+    tasks_dict = get_report_pm(user_name)
+    
+    if tasks_dict:
+        users = list(tasks_dict.keys())
+        mes_num = len(users)
+        logger.info(f"got PM report data for {mes_num} users: {users}")
+        
+        # create formatted reports for each user from tasks_dict
+        reports = []
+        for user, user_df in tasks_dict.items():
+            tg_user_name = get_tg_user(user)
+            user_report = format_report(user_df, user, tg_user_name, max_len=4000, max_note_len=100)
+            reports.append(user_report)
+        
+        # send each report as a separate message 
+        for report in reports:
+            try:
+                await context.bot.send_message(
+                    chat_id=update.effective_chat.id,
+                    text=report,
+                    parse_mode='HTML'  
+                )   
+            except Exception as err:
+                logger.error(f"error sending PM report to user: {user_id}/{user_name}")
+    else:
+        report_message = (
+            f"<b>{datetime.now().strftime('%d %b %Y · %a')}</b>\n\n" 
+            "<code>No data is present for now</code>"
+        )
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=report_message,
+            parse_mode="HTML"  
+        )    
+    
+ 
+# /BA REPORT command handler    
+async def ba_report_command(update: Update, context: CallbackContext):
+    user_id = update.effective_user.id
+    user_gid, user_name, user_token, tg_user = get_redis_data(user_id)
+    
+    tasks_dict = get_report_ba(user_name)
+    
+    if tasks_dict:
+        users = list(tasks_dict.keys())
+        mes_num = len(users)
+        logger.info(f"got BA report data for {mes_num} users: {users}")
+        
+        # create formatted reports for each user from tasks_dict
+        reports = []
+        for user, user_df in tasks_dict.items():
+            tg_user_name = get_tg_user(user)
+            user_report = format_report(user_df, user, tg_user_name, max_len=4000, max_note_len=100)
+            reports.append(user_report)
+        
+        # send each report as a separate message 
+        for report in reports:
+            try:
+                await context.bot.send_message(
+                    chat_id=update.effective_chat.id,
+                    text=report,
+                    parse_mode='HTML'  
+                )   
+            except Exception as err:
+                logger.error(f"error sending PM report to user: {user_id}/{user_name}")
+    else:
+        report_message = (
+            f"<b>{datetime.now().strftime('%d %b %Y · %a')}</b>\n\n" 
+            "<code>No data is present for now</code>"
+        )
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=report_message,
+            parse_mode="HTML"  
+        )    
+            
+    
 # MENU bot post initialization
 async def post_init(application: Application) -> None:
     
@@ -282,7 +373,9 @@ async def post_init(application: Application) -> None:
          BotCommand('connect', 'connect to Asana'),
          BotCommand('mytasks', 'get list of tasks for today'),
          BotCommand('report', 'get report on tasks for all users'),
-         BotCommand('chatid','get chat id of the group/channel')
+         BotCommand('pmreport', 'get report on tasks for PMs'),
+         BotCommand('bareport', 'get report on tasks for BAs'),
+         BotCommand('chatid', 'get chat id of the group/channel')
          ]
         )
     
@@ -290,7 +383,6 @@ async def post_init(application: Application) -> None:
     "type": "default",
     "text": "Menu",  
     }
-    
     await application.bot.set_chat_menu_button()
 
 
@@ -358,7 +450,7 @@ async def scheduled_report(context: ContextTypes.DEFAULT_TYPE):
     
     logger.info("running scheduled report ...")
     
-    tasks_dict = get_tasks_report(None)  
+    tasks_dict = get_report(None)  
 
     if tasks_dict:
         users = list(tasks_dict.keys())
@@ -399,6 +491,8 @@ def create_bot_app():
     bot_app.add_handler(CommandHandler("connect", connect_command)) 
     bot_app.add_handler(CommandHandler("mytasks", mytasks_command)) 
     bot_app.add_handler(CommandHandler("report", report_command)) 
+    bot_app.add_handler(CommandHandler("pmreport", pm_report_command)) 
+    bot_app.add_handler(CommandHandler("bareport", ba_report_command)) 
     
     # callback handlers
     bot_app.add_handler(CallbackQueryHandler(add_notes_callback, pattern="add_notes"))

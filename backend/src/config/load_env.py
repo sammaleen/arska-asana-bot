@@ -1,4 +1,5 @@
 import os 
+import json
 import dotenv 
 
 dotenv.load_dotenv()
@@ -17,7 +18,16 @@ auth_url = "https://app.asana.com/-/oauth_authorize"
 
 # telegram
 bot_token = os.getenv("BOT_TOKEN")
-report_chat_id = os.getenv("REPORT_CHAT_ID")
+report_chat_id = os.getenv("REPORT_CHAT_ID") # main chat
+report_chat_id_pm = os.getenv("REPORT_CHAT_ID_PM") # PM's chat
+report_chat_id_ba = os.getenv("REPORT_CHAT_ID_BA") # BA's chat
+
+# user lists 
+with open('users_to_skip.json', 'r', encoding='utf-8') as config_file:
+    config = json.load(config_file)
+    
+pm_users = config.get('PM','')
+ba_users = config.get('BA','')
 
 # database 
 db_host = os.getenv("DB_HOST")
