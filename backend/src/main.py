@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand
-from telegram.ext import Application, CommandHandler, CallbackContext, CallbackQueryHandler, MessageHandler, filters
+from telegram.ext import Application, CommandHandler, CallbackContext, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 
 import pandas as pd
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, time
 
 from flask import Flask, request, jsonify
 import logging
@@ -25,10 +25,9 @@ from services.asana_data import (get_user_name,
                                  )
 
 from services.redis_client import get_redis_client
-from config.load_env import bot_token, workspace_gid, gs_url
+from config.load_env import bot_token, workspace_gid, gs_url, report_chat_id
 
-
-# set logger and flask
+# set logger 
 logging.basicConfig(
     format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s", 
     level=logging.INFO
@@ -36,23 +35,15 @@ logging.basicConfig(
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
+# set flask
 app = Flask(__name__)
 
-# redis health check
-def redis_check():
-    
-    try:
-        redis_client = get_redis_client()
-        redis_client.ping()
-        logger.info("redis is healthy")
-        return True
-    
-    except Exception as err:
-        logger.error(f"redis connection failed: {err}")
-        return False
-    
-
 # COMMANDS ---
+
+# /CHATID command handler
+async def chat_id_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    await update.message.reply_text(f"chat ID is: {chat_id}")
 
 # /START command handler
 async def start_command(update: Update, context: CallbackContext):
@@ -290,7 +281,8 @@ async def post_init(application: Application) -> None:
         [BotCommand('start', 'go to start message'),
          BotCommand('connect', 'connect to Asana'),
          BotCommand('mytasks', 'get list of tasks for today'),
-         BotCommand('report', 'get report on tasks for all users')
+         BotCommand('report', 'get report on tasks for all users'),
+         BotCommand('chatid','get chat id of the group/channel')
          ]
         )
     
@@ -360,6 +352,41 @@ def callback():
         "user_token": "present, saved"
     }), 200
    
+
+# /REPORT scheduler
+async def scheduled_report(context: ContextTypes.DEFAULT_TYPE):
+    
+    logger.info("running scheduled report ...")
+    
+    tasks_dict = get_tasks_report(None)  
+
+    if tasks_dict:
+        users = list(tasks_dict.keys())
+        logger.info(f"got scheduled report data for {len(users)} users: {users}")
+
+        for user, user_df in tasks_dict.items():
+            tg_user_name = get_tg_user(user)
+            user_report = format_report(user_df, user, tg_user_name, max_len=4000, max_note_len=100)
+            try:
+                await context.bot.send_message(
+                    chat_id=report_chat_id,
+                    text=user_report,
+                    parse_mode='HTML'
+                )
+            except Exception as err:
+                logger.error(f"error sending scheduled report for {user}: {err}")
+    else:
+        report_message = (
+            f"<b>{datetime.now().strftime('%d %b %Y · %a')}</b>\n\n"
+            "<code>No data is present for now</code>"
+        )
+        await context.bot.send_message(
+            chat_id=report_chat_id,
+            text=report_message,
+            parse_mode="HTML"
+        )
+    
+   
    
 # bot initialization 
 def create_bot_app():
@@ -367,6 +394,7 @@ def create_bot_app():
     bot_app = Application.builder().token(bot_token).post_init(post_init).build()
     
     # command handlers
+    bot_app.add_handler(CommandHandler("chatid", chat_id_command)) 
     bot_app.add_handler(CommandHandler("start", start_command)) 
     bot_app.add_handler(CommandHandler("connect", connect_command)) 
     bot_app.add_handler(CommandHandler("mytasks", mytasks_command)) 
@@ -383,6 +411,15 @@ def create_bot_app():
 # run bot polling
 def main():
     bot_app = create_bot_app()   
+    
+    # scheduled run for /report
+    job_queue = bot_app.job_queue
+    job_queue.run_daily(
+        scheduled_report,
+        time=time(hour=10, minute=5),
+        days=(0, 1, 2, 3, 4)  # Mon-Fri
+    )
+    
     bot_app.run_polling()
 
 if __name__ == "__main__":

@@ -17,6 +17,7 @@ auth_url = "https://app.asana.com/-/oauth_authorize"
 
 # telegram
 bot_token = os.getenv("BOT_TOKEN")
+report_chat_id = os.getenv("REPORT_CHAT_ID")
 
 # database 
 db_host = os.getenv("DB_HOST")

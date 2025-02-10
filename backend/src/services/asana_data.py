@@ -5,8 +5,6 @@ import mysql.connector
 import redis
 import redis.exceptions
 import pandas as pd
-from datetime import date
-from datetime import datetime
 from datetime import datetime, date
 
 
