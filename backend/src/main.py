@@ -33,7 +33,9 @@ from config.load_env import (bot_token,
                              gs_url,
                              report_chat_id, 
                              report_chat_id_pm, 
-                             report_chat_id_ba
+                             report_chat_id_ba,
+                             pm_users,
+                             ba_users
                              )
 
 # set logger 
