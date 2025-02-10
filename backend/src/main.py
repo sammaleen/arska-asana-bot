@@ -82,8 +82,10 @@ async def start_command(update: Update, context: CallbackContext):
         "*Команды*\n"
         "[/start] \\- вернуться к стартовому сообщению\n"
         "[/connect] \\- авторизоваться в Асане\n"
-        "[/mytasks] \\- посмотреть свои задачи на день\n"
-        "[/report] \\- получить отчет по плану на день для всех\n\n"
+        "[/mytasks] \\- посмотреть свои задачи на день, добавить заметку\n"
+        "[/report] \\- получить отчет по плану на день для всех\n"
+        "[/pm_report] \\- получить отчет по плану на день для руководителей проектов\n"
+        "[/ba_report] \\- получить отчет по плану на день для бизнес-аналитиков\n\n"
         
         "━\n"
         "*По вопросам*\n"
@@ -375,8 +377,8 @@ async def post_init(application: Application) -> None:
          BotCommand('connect', 'connect to Asana'),
          BotCommand('mytasks', 'get list of tasks for today'),
          BotCommand('report', 'get report on tasks for all users'),
-         BotCommand('pmreport', 'get report on tasks for PMs'),
-         BotCommand('bareport', 'get report on tasks for BAs'),
+         BotCommand('pm_report', 'get report on tasks for PMs'),
+         BotCommand('ba_report', 'get report on tasks for BAs'),
          BotCommand('chatid', 'get chat id of the group/channel')
          ]
         )
@@ -493,8 +495,8 @@ def create_bot_app():
     bot_app.add_handler(CommandHandler("connect", connect_command)) 
     bot_app.add_handler(CommandHandler("mytasks", mytasks_command)) 
     bot_app.add_handler(CommandHandler("report", report_command)) 
-    bot_app.add_handler(CommandHandler("pmreport", pm_report_command)) 
-    bot_app.add_handler(CommandHandler("bareport", ba_report_command)) 
+    bot_app.add_handler(CommandHandler("pm_report", pm_report_command)) 
+    bot_app.add_handler(CommandHandler("ba_report", ba_report_command)) 
     
     # callback handlers
     bot_app.add_handler(CallbackQueryHandler(add_notes_callback, pattern="add_notes"))
