@@ -249,7 +249,7 @@ async def report_command(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
     user_gid, user_name, user_token, tg_user = get_redis_data(user_id)
     
-    tasks_dict = get_report(user_name)
+    tasks_dict = get_report(user_name, pm_users, ba_users)
     
     if tasks_dict:
         users = list(tasks_dict.keys())
@@ -290,7 +290,7 @@ async def pm_report_command(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
     user_gid, user_name, user_token, tg_user = get_redis_data(user_id)
     
-    tasks_dict = get_report_pm(user_name)
+    tasks_dict = get_report_pm(user_name, pm_users)
     
     if tasks_dict:
         users = list(tasks_dict.keys())
@@ -331,7 +331,7 @@ async def ba_report_command(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
     user_gid, user_name, user_token, tg_user = get_redis_data(user_id)
     
-    tasks_dict = get_report_ba(user_name)
+    tasks_dict = get_report_ba(user_name, ba_users)
     
     if tasks_dict:
         users = list(tasks_dict.keys())
