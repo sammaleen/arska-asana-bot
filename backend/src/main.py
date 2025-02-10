@@ -43,7 +43,7 @@ app = Flask(__name__)
 # /CHATID command handler
 async def chat_id_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
-    await update.message.reply_text(f"chat ID is: {chat_id}")
+    await update.message.reply_text(f"chat ID is: `{chat_id}`", parse_mode="Markdown")
 
 # /START command handler
 async def start_command(update: Update, context: CallbackContext):
