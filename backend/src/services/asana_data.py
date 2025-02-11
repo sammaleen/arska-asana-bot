@@ -453,7 +453,7 @@ def get_report(user_name, pm_users, ba_users):
     
     skip_users = pm_users + ba_users
     skip_users = [user.lower() for user in skip_users]
-    logger.info(f"request for general report, skipped users: {skip_users}")
+    logger.info(f"request for general report, users to skip: {skip_users}")
     
     conn = None
         
@@ -488,8 +488,6 @@ def get_report(user_name, pm_users, ba_users):
             """
             )
         notes_df = pd.read_sql(notes_query, conn, params=params)
-        
-        logger.info(f"report data fetched for user: {user_name}")
                 
         # form tasks_dict
         tasks_dict = {}
