@@ -22,12 +22,18 @@ report_chat_id = os.getenv("REPORT_CHAT_ID") # main chat
 report_chat_id_pm = os.getenv("REPORT_CHAT_ID_PM") # PM's chat
 report_chat_id_ba = os.getenv("REPORT_CHAT_ID_BA") # BA's chat
 
-# user lists 
-with open('users_to_skip.json', 'r', encoding='utf-8') as config_file:
+# user lists from json
+cwdir = os.path.dirname(os.path.abspath(__file__))
+root_dir = os.path.abspath(os.path.join(cwdir, '../../../'))
+json_path = os.path.join(root_dir, 'users_to_skip.json')
+
+with open('json_path', 'r', encoding='utf-8') as config_file:
     config = json.load(config_file)
     
 pm_users = config.get('PM','')
 ba_users = config.get('BA','')
+
+print(pm_users, ba_users)
 
 # database 
 db_host = os.getenv("DB_HOST")
