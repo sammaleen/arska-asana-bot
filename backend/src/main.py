@@ -514,7 +514,7 @@ def main():
     job_queue = bot_app.job_queue
     job_queue.run_daily(
         scheduled_report,
-        time=time(hour=13, minute=30),
+        time=time(hour=20, minute=00),
         days=(0, 1, 2, 3, 4)  # Mon-Fri
     )
     

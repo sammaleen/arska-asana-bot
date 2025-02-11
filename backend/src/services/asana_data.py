@@ -452,6 +452,8 @@ def store_note(note, user_id):
 def get_report(user_name, pm_users, ba_users):
     
     skip_users = pm_users + ba_users
+    skip_users = [user.lower() for user in skip_users]
+    logger.info(f"request for general report, skipped users: {skip_users}")
     
     conn = None
         
@@ -496,15 +498,20 @@ def get_report(user_name, pm_users, ba_users):
             users = tasks_df['user_name'].unique().tolist()
             
             for user in users:
-                if user in skip_users:
+                user_lowcase = user.lower()
+                
+                if user_lowcase in skip_users:
+                    logger.info(f"general report, skipping user: {user}")
                     continue 
                 
                 user_tasks = tasks_df[tasks_df['user_name'] == user]
                 user_notes = notes_df[notes_df['user_name'] == user] if not notes_df.empty else None
                 
                 if user_notes is not None and not user_notes.empty:
+                    user_tasks = user_tasks.copy()
                     user_tasks.loc[:, 'extra_note'] = user_notes['note'].iloc[0]
                 else:
+                    user_tasks = user_tasks.copy()
                     user_tasks.loc[:, 'extra_note'] = None
                     
                 tasks_dict[user] = user_tasks.reset_index(drop=True)      
