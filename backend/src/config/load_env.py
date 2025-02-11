@@ -27,7 +27,7 @@ cwdir = os.path.dirname(os.path.abspath(__file__))
 root_dir = os.path.abspath(os.path.join(cwdir, '../../../'))
 json_path = os.path.join(root_dir, 'users_to_skip.json')
 
-with open('json_path', 'r', encoding='utf-8') as config_file:
+with open(json_path, 'r', encoding='utf-8') as config_file:
     config = json.load(config_file)
     
 pm_users = config.get('PM','')
