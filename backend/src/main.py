@@ -82,7 +82,7 @@ async def start_command(update: Update, context: CallbackContext):
         "*Команды*\n"
         "[/start] \\- вернуться к стартовому сообщению\n"
         "[/connect] \\- авторизоваться в Асане\n"
-        "[/mytasks] \\- посмотреть свои задачи на день, добавить заметку\n"
+        "[/mytasks] \\- посмотреть свои задачи на день, добавить заметку\n\n"
         "[/report] \\- получить отчет по плану на день для всех\n"
         "[/pm\_report] \\- получить отчет по плану на день для руководителей проектов\n"
         "[/ba\_report] \\- получить отчет по плану на день для бизнес\-аналитиков\n\n"
@@ -454,7 +454,7 @@ async def scheduled_report(context: ContextTypes.DEFAULT_TYPE):
     
     logger.info("running scheduled report ...")
     
-    tasks_dict = get_report(None)  
+    tasks_dict = get_report(None, pm_users, ba_users)  
 
     if tasks_dict:
         users = list(tasks_dict.keys())
@@ -514,7 +514,7 @@ def main():
     job_queue = bot_app.job_queue
     job_queue.run_daily(
         scheduled_report,
-        time=time(hour=10, minute=5),
+        time=time(hour=13, minute=30),
         days=(0, 1, 2, 3, 4)  # Mon-Fri
     )
     
