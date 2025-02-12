@@ -514,10 +514,12 @@ def main():
     job_queue = bot_app.job_queue
     job_queue.run_daily(
         scheduled_report,
-        time=time(hour=16, minute=30),
+        time=time(hour=7, minute=5),
         days=(0, 1, 2, 3, 4)  # Mon-Fri
     )
     
+    job_queue.run_once(scheduled_report, when=5)  
+
     bot_app.run_polling()
 
 if __name__ == "__main__":
