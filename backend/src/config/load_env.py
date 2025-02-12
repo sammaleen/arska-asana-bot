@@ -33,8 +33,6 @@ with open(json_path, 'r', encoding='utf-8') as config_file:
 pm_users = config.get('PM','')
 ba_users = config.get('BA','')
 
-print(pm_users, ba_users)
-
 # database 
 db_host = os.getenv("DB_HOST")
 db_user = os.getenv("DB_USER")
@@ -51,6 +49,5 @@ token_ttl = 518400 # store cache for 6 days
 # misc
 gs_url = os.getenv("GS_URL")
 
- 
 
 
