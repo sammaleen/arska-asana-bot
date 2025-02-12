@@ -453,7 +453,8 @@ def get_report(user_name, pm_users, ba_users):
     
     skip_users = pm_users + ba_users
     skip_users = [user.lower() for user in skip_users]
-    logger.info(f"request for general report, users to skip: {skip_users}")
+    
+    logger.info(f"request for general report by {user_name}")
     
     conn = None
         
@@ -531,6 +532,8 @@ def get_report_pm(user_name, pm_users):
     if not pm_users:
         logger.info("PM users list is empty")
         return None
+    
+    logger.info(f"request for PM report by {user_name}")    
         
     conn = None
         
@@ -583,8 +586,10 @@ def get_report_pm(user_name, pm_users):
                 user_notes = notes_df[notes_df['user_name'] == user] if not notes_df.empty else None
                 
                 if user_notes is not None and not user_notes.empty:
+                    user_tasks = user_tasks.copy()
                     user_tasks.loc[:, 'extra_note'] = user_notes['note'].iloc[0]
                 else:
+                    user_tasks = user_tasks.copy()
                     user_tasks.loc[:, 'extra_note'] = None
                     
                 tasks_dict[user] = user_tasks.reset_index(drop=True)      
@@ -606,6 +611,8 @@ def get_report_ba(user_name, ba_users):
     if not ba_users:
         logger.info("BA users list is empty")
         return None
+    
+    logger.info(f"request for BA report by {user_name}")  
         
     conn = None
         
@@ -658,8 +665,10 @@ def get_report_ba(user_name, ba_users):
                 user_notes = notes_df[notes_df['user_name'] == user] if not notes_df.empty else None
                 
                 if user_notes is not None and not user_notes.empty:
+                    user_tasks = user_tasks.copy()
                     user_tasks.loc[:, 'extra_note'] = user_notes['note'].iloc[0]
                 else:
+                    user_tasks = user_tasks.copy()
                     user_tasks.loc[:, 'extra_note'] = None
                     
                 tasks_dict[user] = user_tasks.reset_index(drop=True)      
