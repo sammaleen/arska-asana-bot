@@ -303,7 +303,7 @@ async def pm_report_command(update: Update, context: CallbackContext):
         reports = []
         for user, user_df in tasks_dict.items():
             tg_user_name = get_tg_user(user)
-            user_report = format_report(user_df, user, tg_user_name, max_len=4000, max_note_len=100)
+            user_report = format_report(user_df, user, tg_user_name, max_len=4000, max_note_len=85)
             reports.append(user_report)
         
         # send each report as a separate message 
@@ -344,7 +344,7 @@ async def ba_report_command(update: Update, context: CallbackContext):
         reports = []
         for user, user_df in tasks_dict.items():
             tg_user_name = get_tg_user(user)
-            user_report = format_report(user_df, user, tg_user_name, max_len=4000, max_note_len=100)
+            user_report = format_report(user_df, user, tg_user_name, max_len=4000, max_note_len=85)
             reports.append(user_report)
         
         # send each report as a separate message 
@@ -462,7 +462,8 @@ async def scheduled_report(context: ContextTypes.DEFAULT_TYPE):
 
         for user, user_df in tasks_dict.items():
             tg_user_name = get_tg_user(user)
-            user_report = format_report(user_df, user, tg_user_name, max_len=4000, max_note_len=100)
+            user_report = format_report(user_df, user, tg_user_name, max_len=4000, max_note_len=85)
+            
             try:
                 await context.bot.send_message(
                     chat_id=report_chat_id,
@@ -470,7 +471,7 @@ async def scheduled_report(context: ContextTypes.DEFAULT_TYPE):
                     parse_mode='HTML'
                 )
             except Exception as err:
-                logger.error(f"error sending scheduled report for {user}: {err}")
+                logger.error(f"error sending scheduled report: {err}")
     else:
         report_message = (
             f"<b>{datetime.now().strftime('%d %b %Y · %a')}</b>\n\n"
@@ -482,7 +483,6 @@ async def scheduled_report(context: ContextTypes.DEFAULT_TYPE):
             parse_mode="HTML"
         )
     
-   
    
 # bot initialization 
 def create_bot_app():
@@ -510,11 +510,11 @@ def create_bot_app():
 def main():
     bot_app = create_bot_app()   
     
-    # scheduled run for /report
+    # scheduled run for /report command
     job_queue = bot_app.job_queue
     job_queue.run_daily(
         scheduled_report,
-        time=time(hour=20, minute=00),
+        time=time(hour=16, minute=30),
         days=(0, 1, 2, 3, 4)  # Mon-Fri
     )
     
