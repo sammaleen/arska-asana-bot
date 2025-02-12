@@ -462,7 +462,7 @@ def get_report(user_name, pm_users, ba_users):
         conn = mysql.connector.connect(
         user=db_user,
         password=db_pass,
-        host = db_host,
+        host=db_host,
         database=database
         )
         
