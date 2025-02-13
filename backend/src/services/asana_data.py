@@ -200,6 +200,47 @@ def get_redis_data(user_id):
             cursor.close()
         if conn is not None:
             conn.close()
+            
+              
+# EXTRACTING PROJECT NAMES
+def extract_projects(tasks_df):
+    
+    # mapping task_gid to project_name
+    task_project_map = dict(zip(tasks_df['task_gid'], tasks_df['project_name']))
+    
+    # finding project names by traversing task branch
+    def find_project_names(task_gid):
+        all_project_names = []
+        
+        while task_gid and not pd.isna(task_gid):
+            project_names = task_project_map.get(task_gid)
+            
+            if isinstance(project_names, list) and project_names:
+                all_project_names.extend(project_names)
+            
+            # get parent gid
+            parent_gid = tasks_df[tasks_df['task_gid'] == task_gid]['parent.gid'].values[0]
+            if pd.isnull(parent_gid): 
+                break
+            task_gid = parent_gid # move to the next parent
+            
+        all_project_names = list(dict.fromkeys(all_project_names))
+        return all_project_names
+
+    # update subtasks with missing project name
+    for idx, row in tasks_df.iterrows():
+        proj = row['project_name']
+        parent_gid = row['parent.gid']
+        
+        # checking missing projects
+        missing_proj = (isinstance(proj, list) and len(proj) == 0) or (not isinstance(proj, list) and pd.isna(proj))
+        
+        if missing_proj and pd.notna(parent_gid):
+            project_names = find_project_names(parent_gid)
+            if project_names:
+                tasks_df.at[idx, 'project_name'] = project_names
+
+    return tasks_df
               
               
 # GET TASKS FROM ASANA + CHECK NOTES FROM DB / extracting tasks for a user from today/сегодня section of mytask list
@@ -239,7 +280,7 @@ def get_tasks(user_id, workspace_gid):
     
     payload = {
         'completed_since': 'now',
-        'opt_fields': 'name, due_on, projects, projects.name, section.name, notes, assignee_section.name, permalink_url',
+        'opt_fields': 'name, due_on, projects, projects.name, section.name, notes, assignee_section.name, permalink_url, parent, parent.name',
         'limit': 100,
         'opt_pretty': True  
         }
@@ -276,17 +317,26 @@ def get_tasks(user_id, workspace_gid):
                                   | (my_tasks_df['assignee_section.name'].str.lower() == 'сегодня')
                                   | (my_tasks_df['assignee_section.name'].str.lower() == 'фокус')]
         
-        # extracting project names from nested list []
+        # extracting project names from nested list - single project names
+        #if 'project_name' in my_tasks_df.columns:
+            #my_tasks_df['project_name'] = my_tasks_df['project_name'].apply(
+                #lambda x: x[0]['name'] if isinstance(x, list) and x else '')
+          
+        # extracting project names from nested list - multiple project names
         if 'project_name' in my_tasks_df.columns:
             my_tasks_df['project_name'] = my_tasks_df['project_name'].apply(
-                lambda x: x[0]['name'] if isinstance(x, list) and x else '')
+                lambda x: [p['name'] for p in x] if isinstance(x, list) and x else ''
+            )
         
         # re-order columns
         my_tasks_df.drop('task_gid', axis=1, inplace=True)
         my_tasks_df['idx'] = (my_tasks_df.index + 1).tolist()  
-        order = ['idx','project_name','task_name','due_on','notes','url']
+        order = ['idx','project_name','task_name','due_on','notes','url', 'parent.gid']
         my_tasks_df = my_tasks_df[order]
         
+        # extracting project names for subtasks from their parents
+        my_tasks_df = extract_projects(my_tasks_df)
+
         logging.info(f"mytasks data retrieved for user: {user_name}")
         
     else:

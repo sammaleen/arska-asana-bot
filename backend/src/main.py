@@ -510,14 +510,29 @@ def create_bot_app():
 def main():
     bot_app = create_bot_app()   
     
-    # scheduled run for /report command
     job_queue = bot_app.job_queue
+    
+    # scheduled run for general /report command
     job_queue.run_daily(
         scheduled_report,
         time=time(hour=7, minute=5),
         days=(0, 1, 2, 3, 4)  # Mon-Fri
     )
     
+    # scheduled run for PM /pm_report
+    job_queue.run_daily(
+        scheduled_report,
+        time=time(hour=7, minute=5),
+        days=(0, 1, 2, 3, 4)  # Mon-Fri
+    )
+    
+    # scheduled run for BA /ba_report
+    job_queue.run_daily(
+        scheduled_report,
+        time=time(hour=7, minute=5),
+        days=(0, 1, 2, 3, 4)  # Mon-Fri
+    )
+      
     job_queue.run_once(scheduled_report, when=5)  
 
     bot_app.run_polling()
