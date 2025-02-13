@@ -328,14 +328,14 @@ def get_tasks(user_id, workspace_gid):
                 lambda x: [p['name'] for p in x] if isinstance(x, list) and x else ''
             )
         
-        # re-order columns
-        my_tasks_df.drop('task_gid', axis=1, inplace=True)
-        my_tasks_df['idx'] = (my_tasks_df.index + 1).tolist()  
-        order = ['idx','project_name','task_name','due_on','notes','url', 'parent.gid']
-        my_tasks_df = my_tasks_df[order]
-        
         # extracting project names for subtasks from their parents
         my_tasks_df = extract_projects(my_tasks_df)
+        
+        # re-order columns
+        #my_tasks_df.drop('task_gid', axis=1, inplace=True)
+        my_tasks_df['idx'] = (my_tasks_df.index + 1).tolist()  
+        order = ['idx','project_name','task_name','due_on','notes','url']
+        my_tasks_df = my_tasks_df[order]
 
         logging.info(f"mytasks data retrieved for user: {user_name}")
         
