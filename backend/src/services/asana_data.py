@@ -225,7 +225,8 @@ def extract_projects(tasks_df):
             task_gid = parent_gid # move to the next parent
             
         all_project_names = list(dict.fromkeys(all_project_names))
-        return all_project_names
+        #return all_project_names
+        return ', '.join(all_project_names) if all_project_names else ''
 
     # update subtasks with missing project name
     for idx, row in tasks_df.iterrows():
