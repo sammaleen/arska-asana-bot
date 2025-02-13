@@ -203,7 +203,7 @@ def get_redis_data(user_id):
             
               
 # EXTRACTING PROJECT NAMES
-def extract_projects(tasks_df):
+def extract_projects_(tasks_df):
     
     # mapping task_gid to project_name
     task_project_map = dict(zip(tasks_df['task_gid'], tasks_df['project_name']))
@@ -242,6 +242,55 @@ def extract_projects(tasks_df):
                 tasks_df.at[idx, 'project_name'] = project_names
 
     return tasks_df
+        
+def extract_projects(tasks_df):
+    
+    # mapping task_gid to project_name
+    task_project_map = dict(zip(tasks_df['task_gid'], tasks_df['project_name']))
+    
+    # finding project names by traversing task branch
+    def find_project_names(task_gid):
+        all_project_names = []
+        
+        while task_gid and not pd.isna(task_gid):
+            project_names = task_project_map.get(task_gid)
+            
+            if isinstance(project_names, list) and project_names:
+                all_project_names.extend(project_names)
+            
+            # get parent gid as a scalar string
+            parent_gid = tasks_df[tasks_df['task_gid'] == task_gid]['parent.gid'].values[0]
+            if pd.isnull(parent_gid):  # no parent
+                break
+            task_gid = parent_gid  # move to the next parent
+            
+        all_project_names = list(dict.fromkeys(all_project_names))
+        # Convert list of project names to a comma-separated string
+        return ', '.join(all_project_names) if all_project_names else ''
+
+    # update subtasks with missing project name
+    for idx, row in tasks_df.iterrows():
+        proj = row['project_name']
+        parent_gid = row['parent.gid']
+        
+        # checking missing projects:
+        # If it's a list, it's missing if it's empty.
+        # If it's not a list, we check if it's NaN.
+        missing_proj = (isinstance(proj, list) and len(proj) == 0) or (not isinstance(proj, list) and pd.isna(proj))
+        
+        if missing_proj and pd.notna(parent_gid):
+            project_names = find_project_names(parent_gid)
+            if project_names:
+                tasks_df.at[idx, 'project_name'] = project_names
+
+    # Final conversion: ensure all project_name values are strings
+    tasks_df['project_name'] = tasks_df['project_name'].apply(
+        lambda x: ', '.join(x) if isinstance(x, list) else x
+    )
+    
+    return tasks_df
+
+
               
               
 # GET TASKS FROM ASANA + CHECK NOTES FROM DB / extracting tasks for a user from today/сегодня section of mytask list
