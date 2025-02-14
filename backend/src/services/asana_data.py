@@ -243,6 +243,7 @@ def extract_projects(tasks_df):
 
     return tasks_df
         
+        
 def extract_projects_(tasks_df):
     
     # mapping task_gid to project_name
