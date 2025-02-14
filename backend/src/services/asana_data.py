@@ -291,8 +291,6 @@ def extract_projects(tasks_df):
     return tasks_df
 
 
-              
-              
 # GET TASKS FROM ASANA + CHECK NOTES FROM DB / extracting tasks for a user from today/сегодня section of mytask list
 def get_tasks(user_id, workspace_gid):
     
@@ -391,7 +389,9 @@ def get_tasks(user_id, workspace_gid):
         
     else:
         my_tasks_df = pd.DataFrame() 
-        
+    
+    print(my_tasks_df['project_name'].values.tolist())
+    
     return my_tasks_df
 
 
