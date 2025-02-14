@@ -273,9 +273,7 @@ def extract_projects(tasks_df):
         proj = row['project_name']
         parent_gid = row['parent.gid']
         
-        # checking missing projects:
-        # If it's a list, it's missing if it's empty.
-        # If it's not a list, we check if it's NaN.
+        # checking missing projects
         missing_proj = (isinstance(proj, list) and len(proj) == 0) or (not isinstance(proj, list) and pd.isna(proj))
         
         if missing_proj and pd.notna(parent_gid):
@@ -386,12 +384,11 @@ def get_tasks(user_id, workspace_gid):
         my_tasks_df = my_tasks_df[order]
 
         logging.info(f"mytasks data retrieved for user: {user_name}")
+        logging.info(f"project names: {my_tasks_df['project_name'].values.tolist()}")
         
     else:
         my_tasks_df = pd.DataFrame() 
-    
-    print(my_tasks_df['project_name'].values.tolist())
-    
+     
     return my_tasks_df
 
 
