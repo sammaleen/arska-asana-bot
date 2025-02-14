@@ -203,7 +203,7 @@ def get_redis_data(user_id):
             
               
 # EXTRACTING PROJECT NAMES
-def extract_projects_(tasks_df):
+def extract_projects(tasks_df):
     
     # mapping task_gid to project_name
     task_project_map = dict(zip(tasks_df['task_gid'], tasks_df['project_name']))
@@ -243,7 +243,7 @@ def extract_projects_(tasks_df):
 
     return tasks_df
         
-def extract_projects(tasks_df):
+def extract_projects_(tasks_df):
     
     # mapping task_gid to project_name
     task_project_map = dict(zip(tasks_df['task_gid'], tasks_df['project_name']))
