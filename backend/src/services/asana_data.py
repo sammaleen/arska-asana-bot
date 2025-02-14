@@ -371,7 +371,7 @@ def get_tasks(user_id, workspace_gid):
         # extracting project names from nested list - multiple project names
         if 'project_name' in my_tasks_df.columns:
             my_tasks_df['project_name'] = my_tasks_df['project_name'].apply(
-                lambda x: [p['name'] for p in x] if isinstance(x, list) and x else ''
+                lambda x: [p['name'] for p in x] if isinstance(x, list) and x else []
             )
         
         # extracting project names for subtasks from their parents
