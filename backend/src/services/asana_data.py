@@ -364,12 +364,12 @@ def get_tasks(user_id, workspace_gid):
                                   | (my_tasks_df['assignee_section.name'].str.lower() == 'сегодня')
                                   | (my_tasks_df['assignee_section.name'].str.lower() == 'фокус')]
         
-        # extracting project names from nested list - single project names
+        # extracting project names from nested list - if tasks belong to single project
         #if 'project_name' in my_tasks_df.columns:
             #my_tasks_df['project_name'] = my_tasks_df['project_name'].apply(
                 #lambda x: x[0]['name'] if isinstance(x, list) and x else '')
           
-        # extracting project names from nested list - multiple project names
+        # extracting project names from nested list - if tasks belong to multiple projects
         if 'project_name' in my_tasks_df.columns:
             my_tasks_df['project_name'] = my_tasks_df['project_name'].apply(
                 lambda x: [p['name'] for p in x] if isinstance(x, list) and x else []
@@ -394,7 +394,7 @@ def get_tasks(user_id, workspace_gid):
 
 
 # FORMAT mytasks message
-def format_df(df, extra_note, max_len=None, max_note_len=None):
+def format_df_(df, extra_note, max_len=None, max_note_len=None):
     current_date = datetime.now().strftime("%d %b %Y · %a")
     message = f"<b>{current_date}</b>\n\n"
     
@@ -449,6 +449,68 @@ def format_df(df, extra_note, max_len=None, max_note_len=None):
             extra_escaped = extra_escaped[:max_note_len - 3].rstrip() + " (...)"
         message += f"<b>✲ Note:</b>\n{extra_escaped}\n\n"
         
+    return message
+
+
+def format_df(df, extra_note, max_len=None, max_note_len=None):
+    # Ensure that project_name is a string, not a list
+    if 'project_name' in df.columns:
+        df['project_name'] = df['project_name'].apply(
+            lambda x: ', '.join(x) if isinstance(x, list) and x else (x if pd.notna(x) else '')
+        )
+
+    current_date = datetime.now().strftime("%d %b %Y · %a")
+    message = f"<b>{current_date}</b>\n\n"
+
+    # Group tasks by project_name (which is now a string)
+    grouped_tasks = df.groupby('project_name')
+    for project, group in grouped_tasks:
+        # If project is empty, use default label
+        project_name = project if project else 'No project'
+        project_escaped = html.escape(project_name)
+        message += f"━\n<b>{project_escaped}</b>\n"
+
+        # Sort tasks by due date (or treat missing due_on as datetime.max)
+        sorted_group = sorted(
+            group.itertuples(),
+            key=lambda row: datetime.strptime(row.due_on, '%Y-%m-%d') if row.due_on else datetime.max
+        )
+        for idx, row in enumerate(sorted_group, start=1):
+            # Escape all fields to avoid HTML issues
+            task_escaped = html.escape(row.task_name)
+            url_escaped = html.escape(row.url)
+            notes = html.escape(row.notes) if row.notes else '-'
+            due = html.escape(row.due_on) if row.due_on else 'No DL'
+
+            # Format due date if available
+            if due != 'No DL':
+                due_date = datetime.strptime(due, '%Y-%m-%d')
+                due = due_date.strftime("%d-%m-%Y")
+
+            # Truncate notes if necessary
+            if max_note_len and len(notes) > max_note_len:
+                notes = notes[:max_note_len - 3].rstrip() + " (...)"
+
+            task_entry = f'{idx}. <a href="{url_escaped}">{task_escaped}</a> · <code>{due}</code>\n{notes}\n\n'
+            message += task_entry
+
+        message += "\n"
+
+    # Truncate final message carefully if needed
+    if max_len and len(message) > max_len:
+        safe_cut = message.rfind('</a>', 0, max_len)
+        if safe_cut != -1:
+            message = message[:safe_cut+4] + " (...)"
+        else:
+            message = message[:max_len].rstrip() + " (...)"
+
+    # Handle extra note if provided
+    if extra_note:
+        extra_escaped = html.escape(extra_note)
+        if max_note_len and len(extra_escaped) > max_note_len:
+            extra_escaped = extra_escaped[:max_note_len - 3].rstrip() + " (...)"
+        message += f"<b>✲ Note:</b>\n{extra_escaped}\n\n"
+    
     return message
 
 
