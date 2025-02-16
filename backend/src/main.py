@@ -512,21 +512,21 @@ def main():
     
     job_queue = bot_app.job_queue
     
-    # scheduled run for general /report command
+    # scheduled run for general report 
     job_queue.run_daily(
         scheduled_report,
         time=time(hour=7, minute=5),
         days=(0, 1, 2, 3, 4)  # Mon-Fri
     )
     
-    # scheduled run for PM /pm_report
+    # scheduled run for PM report
     job_queue.run_daily(
         scheduled_report,
         time=time(hour=7, minute=5),
         days=(0, 1, 2, 3, 4)  # Mon-Fri
     )
     
-    # scheduled run for BA /ba_report
+    # scheduled run for BA report
     job_queue.run_daily(
         scheduled_report,
         time=time(hour=7, minute=5),

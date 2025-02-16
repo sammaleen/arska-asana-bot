@@ -243,53 +243,7 @@ def extract_projects(tasks_df):
 
     return tasks_df
         
-        
-def extract_projects_(tasks_df):
     
-    # mapping task_gid to project_name
-    task_project_map = dict(zip(tasks_df['task_gid'], tasks_df['project_name']))
-    
-    # finding project names by traversing task branch
-    def find_project_names(task_gid):
-        all_project_names = []
-        
-        while task_gid and not pd.isna(task_gid):
-            project_names = task_project_map.get(task_gid)
-            
-            if isinstance(project_names, list) and project_names:
-                all_project_names.extend(project_names)
-            
-            # get parent gid as a scalar string
-            parent_gid = tasks_df[tasks_df['task_gid'] == task_gid]['parent.gid'].values[0]
-            if pd.isnull(parent_gid):  # no parent
-                break
-            task_gid = parent_gid  # move to the next parent
-            
-        all_project_names = list(dict.fromkeys(all_project_names))
-        # Convert list of project names to a comma-separated string
-        return ', '.join(all_project_names) if all_project_names else ''
-
-    # update subtasks with missing project name
-    for idx, row in tasks_df.iterrows():
-        proj = row['project_name']
-        parent_gid = row['parent.gid']
-        
-        # checking missing projects
-        missing_proj = (isinstance(proj, list) and len(proj) == 0) or (not isinstance(proj, list) and pd.isna(proj))
-        
-        if missing_proj and pd.notna(parent_gid):
-            project_names = find_project_names(parent_gid)
-            if project_names:
-                tasks_df.at[idx, 'project_name'] = project_names
-
-    # Final conversion: ensure all project_name values are strings
-    tasks_df['project_name'] = tasks_df['project_name'].apply(
-        lambda x: ', '.join(x) if isinstance(x, list) else x
-    )
-    
-    return tasks_df
-
-
 # GET TASKS FROM ASANA + CHECK NOTES FROM DB / extracting tasks for a user from today/сегодня section of mytask list
 def get_tasks(user_id, workspace_gid):
     
@@ -327,7 +281,10 @@ def get_tasks(user_id, workspace_gid):
     
     payload = {
         'completed_since': 'now',
-        'opt_fields': 'name, due_on, projects, projects.name, section.name, notes, assignee_section.name, permalink_url, parent, parent.name',
+        'opt_fields': (
+            'name, due_on, projects, projects.name, section.name, assignee_section.name'
+            'notes, permalink_url, parent, parent.name'
+            ),
         'limit': 100,
         'opt_pretty': True  
         }
@@ -419,12 +376,12 @@ def format_df_(df, extra_note, max_len=None, max_note_len=None):
             notes = html.escape(row.notes) if row.notes else '-'
             due = html.escape(row.due_on) if row.due_on else 'No DL'
 
-            # Format due date
+            # format due date
             if due != 'No DL':
                 due_date = datetime.strptime(due, '%Y-%m-%d')
                 due = due_date.strftime("%d-%m-%Y")
             
-            # Truncate notes after escaping
+            # truncate notes after escaping
             if max_note_len and len(notes) > max_note_len:
                 notes = notes[:max_note_len - 3].rstrip() + " (...)"
             
@@ -453,7 +410,8 @@ def format_df_(df, extra_note, max_len=None, max_note_len=None):
 
 
 def format_df(df, extra_note, max_len=None, max_note_len=None):
-    # Ensure that project_name is a string, not a list
+    
+    # ensure that project_name is a string, not a list
     if 'project_name' in df.columns:
         df['project_name'] = df['project_name'].apply(
             lambda x: ', '.join(x) if isinstance(x, list) and x else (x if pd.notna(x) else '')
@@ -462,32 +420,33 @@ def format_df(df, extra_note, max_len=None, max_note_len=None):
     current_date = datetime.now().strftime("%d %b %Y · %a")
     message = f"<b>{current_date}</b>\n\n"
 
-    # Group tasks by project_name (which is now a string)
+    # group tasks by project_name 
     grouped_tasks = df.groupby('project_name')
     for project, group in grouped_tasks:
-        # If project is empty, use default label
+ 
         project_name = project if project else 'No project'
         project_escaped = html.escape(project_name)
         message += f"━\n<b>{project_escaped}</b>\n"
 
-        # Sort tasks by due date (or treat missing due_on as datetime.max)
+        # sort tasks by due date
         sorted_group = sorted(
             group.itertuples(),
             key=lambda row: datetime.strptime(row.due_on, '%Y-%m-%d') if row.due_on else datetime.max
         )
         for idx, row in enumerate(sorted_group, start=1):
-            # Escape all fields to avoid HTML issues
+            
+            # escape all fields to avoid HTML issues
             task_escaped = html.escape(row.task_name)
             url_escaped = html.escape(row.url)
             notes = html.escape(row.notes) if row.notes else '-'
             due = html.escape(row.due_on) if row.due_on else 'No DL'
 
-            # Format due date if available
+            # format due date if available
             if due != 'No DL':
                 due_date = datetime.strptime(due, '%Y-%m-%d')
                 due = due_date.strftime("%d-%m-%Y")
 
-            # Truncate notes if necessary
+            # truncate notes if necessary
             if max_note_len and len(notes) > max_note_len:
                 notes = notes[:max_note_len - 3].rstrip() + " (...)"
 
@@ -496,7 +455,7 @@ def format_df(df, extra_note, max_len=None, max_note_len=None):
 
         message += "\n"
 
-    # Truncate final message carefully if needed
+    # truncate final message carefully if needed
     if max_len and len(message) > max_len:
         safe_cut = message.rfind('</a>', 0, max_len)
         if safe_cut != -1:
@@ -504,7 +463,7 @@ def format_df(df, extra_note, max_len=None, max_note_len=None):
         else:
             message = message[:max_len].rstrip() + " (...)"
 
-    # Handle extra note if provided
+    # handle extra note if provided
     if extra_note:
         extra_escaped = html.escape(extra_note)
         if max_note_len and len(extra_escaped) > max_note_len:
