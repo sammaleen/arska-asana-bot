@@ -568,83 +568,6 @@ def store_note(note, user_id):
         
          
 # GET TASKS FROM DB + CHECK NOTES for additions
-def get_report_(user_name, pm_users, ba_users):
-    
-    skip_users = pm_users + ba_users
-    skip_users = [user.lower() for user in skip_users]
-    
-    logger.info(f"request for general report by {user_name}")
-    
-    conn = None
-        
-    try:
-        conn = mysql.connector.connect(
-        user=db_user,
-        password=db_pass,
-        host=db_host,
-        database=database
-        )
-        
-        # tasks data
-        tasks_query = (
-            """
-            SELECT project_name, user_name, task_name, due_on, notes, url
-            FROM tasks 
-            WHERE date_extracted = %s
-            """
-            )
-        params = (date.today(),)
-        tasks_df = pd.read_sql(tasks_query, conn, params=params)
-        
-        tasks_df['due_on'] = pd.to_datetime(tasks_df['due_on'], errors='coerce').dt.date
-        tasks_df['due_on'] = tasks_df['due_on'].apply(lambda x: x.strftime("%d-%m-%Y") if pd.notnull(x) else "No DL")
-        
-        # notes data
-        notes_query = (
-            """
-            SELECT user_name, note
-            FROM notes
-            WHERE date_added = %s
-            """
-            )
-        notes_df = pd.read_sql(notes_query, conn, params=params)
-                
-        # form tasks_dict
-        tasks_dict = {}
-        
-        if tasks_df is not None and not tasks_df.empty and notes_df is not None:
-            users = tasks_df['user_name'].unique().tolist()
-            
-            for user in users:
-                user_lowcase = user.lower()
-                
-                if user_lowcase in skip_users:
-                    logger.info(f"general report, skipping user: {user}")
-                    continue 
-                
-                user_tasks = tasks_df[tasks_df['user_name'] == user]
-                user_notes = notes_df[notes_df['user_name'] == user] if not notes_df.empty else None
-                
-                if user_notes is not None and not user_notes.empty:
-                    user_tasks = user_tasks.copy()
-                    user_tasks.loc[:, 'extra_note'] = user_notes['note'].iloc[0]
-                else:
-                    user_tasks = user_tasks.copy()
-                    user_tasks.loc[:, 'extra_note'] = None
-                    
-                tasks_dict[user] = user_tasks.reset_index(drop=True)      
-                
-        return tasks_dict
-            
-    except mysql.connector.Error as err:
-        logger.error(f"DB error: {err}")
-        return None
-    
-    finally:
-        if conn is not None:
-            conn.close()
-
-
 def get_report(user_name, pm_users, ba_users):
     
     skip_users = pm_users + ba_users
@@ -653,6 +576,7 @@ def get_report(user_name, pm_users, ba_users):
     logger.info(f"request for general report by {user_name}")
     
     conn = None
+    
     try:
         conn = mysql.connector.connect(
             user=db_user,
@@ -765,8 +689,11 @@ def get_report_pm(user_name, pm_users):
         params = (date.today(),) + tuple(pm_users)
         tasks_df = pd.read_sql(tasks_query, conn, params=params)
         
+        # convert due_on format to dd-mm-YYYY / No DL
         tasks_df['due_on'] = pd.to_datetime(tasks_df['due_on'], errors='coerce').dt.date
-        tasks_df['due_on'] = tasks_df['due_on'].apply(lambda x: x.strftime("%d-%m-%Y") if pd.notnull(x) else "No DL")
+        tasks_df['due_on'] = tasks_df['due_on'].apply(
+            lambda x: x.strftime("%d-%m-%Y") if pd.notnull(x) else "No DL"
+        )
         
         # notes data
         notes_query = (
@@ -779,9 +706,18 @@ def get_report_pm(user_name, pm_users):
             )
         notes_df = pd.read_sql(notes_query, conn, params=params)
         
-        logger.info(f"PM report data fetched for user: {user_name}")
-                
-        # form tasks_dict
+        # normalize project names
+        if not tasks_df.empty and 'project_name' in tasks_df.columns:
+            tasks_df['project_name'] = (
+                tasks_df['project_name']
+                .fillna('')  # replace NaN with empty str
+                .astype(str) # ensure str
+                .str.strip() # strip whitespace
+            )
+            tasks_df.loc[tasks_df['project_name'] == '', 'project_name'] = 'No project'
+        
+           
+        # build tasks_dict
         tasks_dict = {}
         
         if tasks_df is not None and not tasks_df.empty and notes_df is not None:
@@ -791,9 +727,10 @@ def get_report_pm(user_name, pm_users):
                 user_tasks = tasks_df[tasks_df['user_name'] == user]
                 user_notes = notes_df[notes_df['user_name'] == user] if not notes_df.empty else None
                 
+                # merge notes into user_tasks as 'extra_note'
                 if user_notes is not None and not user_notes.empty:
-                    user_tasks = user_tasks.copy()
-                    user_tasks.loc[:, 'extra_note'] = user_notes['note'].iloc[0]
+                    note_value = user_notes['note'].iloc[0]
+                    user_tasks.loc[:, 'extra_note'] = note_value
                 else:
                     user_tasks = user_tasks.copy()
                     user_tasks.loc[:, 'extra_note'] = None
@@ -813,12 +750,12 @@ def get_report_pm(user_name, pm_users):
 
 # REPORT FOR BA
 def get_report_ba(user_name, ba_users):
-        
+    
     if not ba_users:
         logger.info("BA users list is empty")
         return None
     
-    logger.info(f"request for BA report by {user_name}")  
+    logger.info(f"request for BA report by {user_name}")    
         
     conn = None
         
@@ -844,8 +781,11 @@ def get_report_ba(user_name, ba_users):
         params = (date.today(),) + tuple(ba_users)
         tasks_df = pd.read_sql(tasks_query, conn, params=params)
         
+        # convert due_on format to dd-mm-YYYY / No DL
         tasks_df['due_on'] = pd.to_datetime(tasks_df['due_on'], errors='coerce').dt.date
-        tasks_df['due_on'] = tasks_df['due_on'].apply(lambda x: x.strftime("%d-%m-%Y") if pd.notnull(x) else "No DL")
+        tasks_df['due_on'] = tasks_df['due_on'].apply(
+            lambda x: x.strftime("%d-%m-%Y") if pd.notnull(x) else "No DL"
+        )
         
         # notes data
         notes_query = (
@@ -858,9 +798,17 @@ def get_report_ba(user_name, ba_users):
             )
         notes_df = pd.read_sql(notes_query, conn, params=params)
         
-        logger.info(f"BA report data fetched for user: {user_name}")
-                
-        # form tasks_dict
+        # normalize project names
+        if not tasks_df.empty and 'project_name' in tasks_df.columns:
+            tasks_df['project_name'] = (
+                tasks_df['project_name']
+                .fillna('')  # replace NaN with empty str
+                .astype(str) # ensure str
+                .str.strip() # strip whitespace
+            )
+            tasks_df.loc[tasks_df['project_name'] == '', 'project_name'] = 'No project'
+        
+        # build tasks_dict
         tasks_dict = {}
         
         if tasks_df is not None and not tasks_df.empty and notes_df is not None:
@@ -870,9 +818,10 @@ def get_report_ba(user_name, ba_users):
                 user_tasks = tasks_df[tasks_df['user_name'] == user]
                 user_notes = notes_df[notes_df['user_name'] == user] if not notes_df.empty else None
                 
+                # merge notes into user_tasks as 'extra_note'
                 if user_notes is not None and not user_notes.empty:
-                    user_tasks = user_tasks.copy()
-                    user_tasks.loc[:, 'extra_note'] = user_notes['note'].iloc[0]
+                    note_value = user_notes['note'].iloc[0]
+                    user_tasks.loc[:, 'extra_note'] = note_value
                 else:
                     user_tasks = user_tasks.copy()
                     user_tasks.loc[:, 'extra_note'] = None
