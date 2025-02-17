@@ -568,7 +568,7 @@ def store_note(note, user_id):
         
          
 # GET TASKS FROM DB + CHECK NOTES for additions
-def get_report(user_name, pm_users, ba_users):
+def get_report_(user_name, pm_users, ba_users):
     
     skip_users = pm_users + ba_users
     skip_users = [user.lower() for user in skip_users]
@@ -634,6 +634,91 @@ def get_report(user_name, pm_users, ba_users):
                     
                 tasks_dict[user] = user_tasks.reset_index(drop=True)      
                 
+        return tasks_dict
+            
+    except mysql.connector.Error as err:
+        logger.error(f"DB error: {err}")
+        return None
+    
+    finally:
+        if conn is not None:
+            conn.close()
+
+
+def get_report(user_name, pm_users, ba_users):
+    
+    skip_users = pm_users + ba_users
+    skip_users = [user.lower() for user in skip_users]
+    
+    logger.info(f"request for general report by {user_name}")
+    
+    conn = None
+    try:
+        conn = mysql.connector.connect(
+            user=db_user,
+            password=db_pass,
+            host=db_host,
+            database=database
+        )
+        
+        # tasks data
+        tasks_query = """
+            SELECT project_name, user_name, task_name, due_on, notes, url, extra_note
+            FROM tasks
+            WHERE date_extracted = %s
+        """
+        params = (date.today(),)
+        tasks_df = pd.read_sql(tasks_query, conn, params=params)
+
+        # convert 'due_on' 
+        tasks_df['due_on'] = pd.to_datetime(tasks_df['due_on'], errors='coerce').dt.date
+        tasks_df['due_on'] = tasks_df['due_on'].apply(lambda x: x.strftime("%d-%m-%Y") if pd.notnull(x) else "No DL")
+
+        # notes data
+        notes_query = """
+            SELECT user_name, note
+            FROM notes
+            WHERE date_added = %s
+        """
+        notes_df = pd.read_sql(notes_query, conn, params=params)
+        
+        # Prepare tasks_dict for output
+        tasks_dict = {}
+        
+        if tasks_df is not None and not tasks_df.empty:
+            # normalize project_name, empty/NaN to "No project"
+            if 'project_name' in tasks_df.columns:
+                tasks_df['project_name'] = (
+                    tasks_df['project_name']
+                    .fillna('') # replace NaN with ''
+                    .astype(str) # ensure it's str
+                    .str.strip() # strip whitespace
+                )
+                tasks_df.loc[tasks_df['project_name'] == '', 'project_name'] = 'No project'
+                
+            # list of unique users
+            users = tasks_df['user_name'].unique().tolist()
+            
+            for user in users:
+                user_lower = user.lower()
+                
+                if user_lower in skip_users:
+                    logger.info(f"general report, skipping user: {user}")
+                    continue 
+                
+                # filter tasks and notes for this user
+                user_tasks = tasks_df[tasks_df['user_name'] == user].copy()
+                user_notes = notes_df[notes_df['user_name'] == user] if not notes_df.empty else pd.DataFrame()
+                
+                # if there's a "note" entry in notes_df, place it in user_tasks as "extra_note"
+                if not user_notes.empty:
+                    note_value = user_notes['note'].iloc[0]
+                    user_tasks['extra_note'] = note_value
+                else:
+                    user_tasks['extra_note'] = None
+                    
+                tasks_dict[user] = user_tasks.reset_index(drop=True)
+
         return tasks_dict
             
     except mysql.connector.Error as err:
@@ -804,7 +889,7 @@ def get_report_ba(user_name, ba_users):
 
 
 # FORMAT report messages 
-def format_report(user_df, user, tg_user_name, max_len=None, max_note_len=None):
+def format_report_(user_df, user, tg_user_name, max_len=None, max_note_len=None):
     current_date = datetime.now().strftime("%d %b %Y · %a")
 
     if tg_user_name:
@@ -859,6 +944,72 @@ def format_report(user_df, user, tg_user_name, max_len=None, max_note_len=None):
 
     return message
 
+
+def format_report(user_df, user, tg_user_name, max_len=None, max_note_len=None):
+    current_date = datetime.now().strftime("%d %b %Y · %a")
+
+    if tg_user_name:
+        message = f"<b>{user}</b> @{tg_user_name}\n{current_date}\n\n"
+    else:
+        message = f"<b>{user}</b>\n{current_date}\n\n"
+
+    grouped_tasks = user_df.groupby('project_name')  # group tasks by project
+
+    for project, group in grouped_tasks:
+        project_name = project  
+        message += f"━\n<b>{project_name}</b>\n"
+        
+        # sort tasks on due date
+        def parse_due(x):
+            try:
+                return datetime.strptime(x, '%d-%m-%Y')
+            except ValueError:
+                # 'No DL' or invalid => treat as something far in the future
+                return datetime.max
+
+        sorted_group = sorted(group.itertuples(), key=lambda row: parse_due(row.due_on))
+
+        # reset idx, enumerate from 1
+        for idx, row in enumerate(sorted_group, start=1):
+            task = row.task_name
+            url = row.url
+            notes = row.notes if row.notes else '-'  
+            due = row.due_on if row.due_on else 'No DL'
+
+            # crop notes if they exceed length limit
+            if max_note_len and len(notes) > max_note_len:
+                notes = notes[:max_note_len - 3].rstrip() + " (...)"
+
+            # escape characters for HTML formatting
+            task_escaped = (task.replace("<", "&lt;")
+                                 .replace(">", "&gt;")
+                                 .replace("&", "&amp;"))
+            url_escaped = (url.replace("<", "&lt;")
+                               .replace(">", "&gt;")
+                               .replace("&", "&amp;"))
+
+            task_entry = f"{idx}. <a href='{url_escaped}'>{task_escaped}</a> · <code>{due}</code>\n{notes}\n\n"
+            message += task_entry
+
+        message += "\n"
+
+    # crop the whole message if it exceeds max_len
+    if max_len and len(message) > max_len:
+        message = message[:max_len].rstrip() + " (...)"
+
+    # handle extra notes
+    if 'extra_note' in user_df.columns:
+        first_note = user_df['extra_note'].dropna()
+        
+        if not first_note.empty:
+            extra_note = first_note.iloc[0]
+            
+            # crop note if needed
+            if max_note_len and len(extra_note) > max_note_len:
+                extra_note = extra_note[:max_note_len - 3].rstrip() + " (...)"
+            message += f"<b>✲ Note:</b>\n{extra_note}\n\n"
+
+    return message
 
 #GET TG USER
 def get_tg_user(user_name):
