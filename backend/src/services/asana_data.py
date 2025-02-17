@@ -203,25 +203,9 @@ def get_redis_data(user_id):
             
               
 # EXTRACTING PROJECT NAMES
-def extract_projects(task_gid, user_token, cache=None):
-    
-    # provide a cache if there is none
-    if cache is None:
-        cache = {}
-        
-    seen = set() # to detect cycles/repeated visits in the same api call
-    
+def extract_projects(task_gid, user_token):
+
     while task_gid:
-        # check if task in cache 
-        if task_gid in cache:
-            return cache[task_gid]
-        
-        # check for cycles
-        if task_gid in seen:
-            logging.info(f"cycle detected for task_gid: {task_gid}")
-            cache[task_gid] = []
-            return []
-        seen.add(task_gid)
         
         # fetch data on a single task
         url = f'https://app.asana.com/api/1.0/tasks/{task_gid}'
@@ -247,22 +231,15 @@ def extract_projects(task_gid, user_token, cache=None):
             parent_gid = parent.get('gid') if parent else None
             
             if project_names:
-                cache[task_gid] = project_names
                 return project_names
-            
             if parent_gid:
                 task_gid = parent_gid
-                
             else:
-                cache[task_gid] = []
                 return []
             
         except requests.exceptions.RequestException as err:
             logging.error(f"network error {err} while extracting project names for task: {task_gid}")
-            cache[task_gid] = None
             return None
-            
-    cache[task_gid] = []
     return []
     
     
@@ -274,9 +251,6 @@ def get_tasks(user_id, workspace_gid):
     if user_gid is None or user_token is None:
         logging.error(f"unable to retrieve Asana creds for user: {user_id}")
         return pd.DataFrame()
-    
-    # cache for api calls
-    project_cache = {}
     
     # get list from asana
     url = f"https://app.asana.com/api/1.0/users/{user_gid}/user_task_list"
@@ -363,12 +337,11 @@ def get_tasks(user_id, workspace_gid):
             task_gid = task_row['task_gid']
             
             if not proj:
-                project_names = extract_projects(task_gid, user_token, cache=project_cache)
+                project_names = extract_projects(task_gid, user_token)
                 if project_names:
                     my_tasks_df.at[idx, 'project_name'] = project_names
 
         logging.info(f"mytasks data retrieved for user: {user_name}")
-        
     else:
         my_tasks_df = pd.DataFrame() 
      
