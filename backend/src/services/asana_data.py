@@ -203,46 +203,68 @@ def get_redis_data(user_id):
             
               
 # EXTRACTING PROJECT NAMES
-def extract_projects(tasks_df):
+def extract_projects(task_gid, user_token, cache=None):
     
-    # mapping task_gid to project_name
-    task_project_map = dict(zip(tasks_df['task_gid'], tasks_df['project_name']))
+    # provide a cache if there is none
+    if cache is None:
+        cache = {}
+        
+    seen = set() # to detect cycles/repeated visits in the same api call
     
-    # finding project names by traversing task branch
-    def find_project_names(task_gid):
-        all_project_names = []
+    while task_gid:
+        # check if task in cache 
+        if task_gid in cache:
+            return cache[task_gid]
         
-        while task_gid and not pd.isna(task_gid):
-            project_names = task_project_map.get(task_gid)
-            
-            if isinstance(project_names, list) and project_names:
-                all_project_names.extend(project_names)
-            
-            # get parent gid
-            parent_gid = tasks_df[tasks_df['task_gid'] == task_gid]['parent.gid'].values[0]
-            if pd.isnull(parent_gid): 
-                break
-            task_gid = parent_gid # move to the next parent
-            
-        all_project_names = list(dict.fromkeys(all_project_names))
-        #return all_project_names
-        return ', '.join(all_project_names) if all_project_names else ''
-
-    # update subtasks with missing project name
-    for idx, row in tasks_df.iterrows():
-        proj = row['project_name']
-        parent_gid = row['parent.gid']
+        # check for cycles
+        if task_gid in seen:
+            logging.info(f"cycle detected for task_gid: {task_gid}")
+            cache[task_gid] = []
+            return []
+        seen.add(task_gid)
         
-        # checking missing projects
-        missing_proj = (isinstance(proj, list) and len(proj) == 0) or (not isinstance(proj, list) and pd.isna(proj))
+        # fetch data on a single task
+        url = f'https://app.asana.com/api/1.0/tasks/{task_gid}'
+        headers = {'Authorization': f'Bearer {user_token}'}
         
-        if missing_proj and pd.notna(parent_gid):
-            project_names = find_project_names(parent_gid)
+        payload = {
+            'opt_fields': 'projects, projects.name, parent, parent.name'
+        }
+        
+        try:
+            response = requests.get(url, headers=headers, params=payload)
+            response.raise_for_status()
+            
+            response_json = response.json()
+            data = response_json.get('data', {})
+            
+            # project names
+            projects = data.get('projects', [])
+            project_names = [p['name'] for p in projects] if projects else []
+            
+            # parent gids
+            parent = data.get('parent')
+            parent_gid = parent.get('gid') if parent else None
+            
             if project_names:
-                tasks_df.at[idx, 'project_name'] = project_names
-
-    return tasks_df
-        
+                cache[task_gid] = project_names
+                return project_names
+            
+            if parent_gid:
+                task_gid = parent_gid
+                
+            else:
+                cache[task_gid] = []
+                return []
+            
+        except requests.exceptions.RequestException as err:
+            logging.error(f"network error {err} while extracting project names for task: {task_gid}")
+            cache[task_gid] = None
+            return None
+            
+    cache[task_gid] = []
+    return []
+    
     
 # GET TASKS FROM ASANA + CHECK NOTES FROM DB / extracting tasks for a user from today/сегодня section of mytask list
 def get_tasks(user_id, workspace_gid):
@@ -252,6 +274,9 @@ def get_tasks(user_id, workspace_gid):
     if user_gid is None or user_token is None:
         logging.error(f"unable to retrieve Asana creds for user: {user_id}")
         return pd.DataFrame()
+    
+    # cache for api calls
+    project_cache = {}
     
     # get list from asana
     url = f"https://app.asana.com/api/1.0/users/{user_gid}/user_task_list"
@@ -282,7 +307,8 @@ def get_tasks(user_id, workspace_gid):
     payload = {
         'completed_since': 'now',
         'opt_fields': (
-            'name, due_on, projects, projects.name, section.name, assignee_section.name'
+            'name, due_on, projects, projects.name'
+            'section.name, assignee_section.name'
             'notes, permalink_url, parent, parent.name'
             ),
         'limit': 100,
@@ -316,33 +342,32 @@ def get_tasks(user_id, workspace_gid):
                                     'permalink_url':'url',
                                     'projects':'project_name'}, inplace=True)
     
-        # SECTION NAME = TODAY или СЕГОДНЯ
-        my_tasks_df = my_tasks_df[(my_tasks_df['assignee_section.name'].str.lower() == 'today') 
-                                  | (my_tasks_df['assignee_section.name'].str.lower() == 'сегодня')
-                                  | (my_tasks_df['assignee_section.name'].str.lower() == 'фокус')]
-        
-        # extracting project names from nested list - if tasks belong to single project
-        #if 'project_name' in my_tasks_df.columns:
-            #my_tasks_df['project_name'] = my_tasks_df['project_name'].apply(
-                #lambda x: x[0]['name'] if isinstance(x, list) and x else '')
+        # filter tasks from today sections
+        if 'assignee_section.name' in my_tasks_df.columns:
+            my_tasks_df = my_tasks_df[
+                my_tasks_df['assignee_section.name'].str.lower().isin(['today', 'сегодня', 'фокус'])
+                ]
           
         # extracting project names from nested list - if tasks belong to multiple projects
+        def dicts_to_names(x):
+            if isinstance(x, list):
+                return [p.get('name', '') for p in x if 'name' in p]
+            return []
+        
         if 'project_name' in my_tasks_df.columns:
-            my_tasks_df['project_name'] = my_tasks_df['project_name'].apply(
-                lambda x: [p['name'] for p in x] if isinstance(x, list) and x else []
-            )
+            my_tasks_df['project_name'] = my_tasks_df['project_name'].apply(dicts_to_names)
         
-        # extracting project names for subtasks from their parents
-        my_tasks_df = extract_projects(my_tasks_df)
-        
-        # re-order columns
-        #my_tasks_df.drop('task_gid', axis=1, inplace=True)
-        my_tasks_df['idx'] = (my_tasks_df.index + 1).tolist()  
-        order = ['idx','project_name','task_name','due_on','notes','url']
-        my_tasks_df = my_tasks_df[order]
+        # extracting project names from parent tasks
+        for idx, task_row in my_tasks_df.iterrows():
+            proj = task_row['project_name']
+            task_gid = task_row['task_gid']
+            
+            if not proj:
+                project_names = extract_projects(task_gid, user_token, cache=project_cache)
+                if project_names:
+                    my_tasks_df.at[idx, 'project_name'] = project_names
 
         logging.info(f"mytasks data retrieved for user: {user_name}")
-        logging.info(f"project names: {my_tasks_df['project_name'].values.tolist()}")
         
     else:
         my_tasks_df = pd.DataFrame() 
@@ -351,80 +376,20 @@ def get_tasks(user_id, workspace_gid):
 
 
 # FORMAT mytasks message
-def format_df_(df, extra_note, max_len=None, max_note_len=None):
-    current_date = datetime.now().strftime("%d %b %Y · %a")
-    message = f"<b>{current_date}</b>\n\n"
-    
-    grouped_tasks = df.groupby('project_name')
-    
-    for project, group in grouped_tasks:
-        # escape project name first
-        project_name = project if project else 'No project'
-        project_escaped = html.escape(project_name)
-        message += f"━\n<b>{project_escaped}</b>\n"
-        
-        # sort tasks
-        sorted_group = sorted(
-            group.itertuples(),
-            key=lambda row: datetime.strptime(row.due_on, '%Y-%m-%d') if row.due_on else datetime.max
-        )
-        
-        for idx, row in enumerate(sorted_group, start=1):
-            # escape all fields before processing
-            task_escaped = html.escape(row.task_name)
-            url_escaped = html.escape(row.url)
-            notes = html.escape(row.notes) if row.notes else '-'
-            due = html.escape(row.due_on) if row.due_on else 'No DL'
-
-            # format due date
-            if due != 'No DL':
-                due_date = datetime.strptime(due, '%Y-%m-%d')
-                due = due_date.strftime("%d-%m-%Y")
-            
-            # truncate notes after escaping
-            if max_note_len and len(notes) > max_note_len:
-                notes = notes[:max_note_len - 3].rstrip() + " (...)"
-            
-            task_entry = f'{idx}. <a href="{url_escaped}">{task_escaped}</a> · <code>{due}</code>\n{notes}\n\n'
-            message += task_entry
-
-        message += "\n"
-
-    # truncate final message more carefully
-    if max_len and len(message) > max_len:
-        # find the last valid closing tag
-        safe_cut = message.rfind('</a>', 0, max_len)
-        if safe_cut != -1:
-            message = message[:safe_cut+4] + " (...)"
-        else:
-            message = message[:max_len].rstrip() + " (...)"
-
-    # handle extra note
-    if extra_note:
-        extra_escaped = html.escape(extra_note)
-        if max_note_len and len(extra_escaped) > max_note_len:
-            extra_escaped = extra_escaped[:max_note_len - 3].rstrip() + " (...)"
-        message += f"<b>✲ Note:</b>\n{extra_escaped}\n\n"
-        
-    return message
-
-
 def format_df(df, extra_note, max_len=None, max_note_len=None):
     
-    # ensure that project_name is a string, not a list
-    if 'project_name' in df.columns:
-        df['project_name'] = df['project_name'].apply(
-            lambda x: ', '.join(x) if isinstance(x, list) and x else (x if pd.notna(x) else '')
-        )
-
     current_date = datetime.now().strftime("%d %b %Y · %a")
     message = f"<b>{current_date}</b>\n\n"
 
     # group tasks by project_name 
     grouped_tasks = df.groupby('project_name')
+    
     for project, group in grouped_tasks:
+        if isinstance(project, list):
+            project_name = ', '.join(project)  
+        else:
+            project_name = project if project else 'No project'
  
-        project_name = project if project else 'No project'
         project_escaped = html.escape(project_name)
         message += f"━\n<b>{project_escaped}</b>\n"
 
@@ -433,6 +398,7 @@ def format_df(df, extra_note, max_len=None, max_note_len=None):
             group.itertuples(),
             key=lambda row: datetime.strptime(row.due_on, '%Y-%m-%d') if row.due_on else datetime.max
         )
+        
         for idx, row in enumerate(sorted_group, start=1):
             
             # escape all fields to avoid HTML issues
@@ -458,6 +424,7 @@ def format_df(df, extra_note, max_len=None, max_note_len=None):
     # truncate final message carefully if needed
     if max_len and len(message) > max_len:
         safe_cut = message.rfind('</a>', 0, max_len)
+        
         if safe_cut != -1:
             message = message[:safe_cut+4] + " (...)"
         else:
@@ -840,63 +807,8 @@ def get_report_ba(user_name, ba_users):
 
 
 # FORMAT report messages 
-def format_report_(user_df, user, tg_user_name, max_len=None, max_note_len=None):
-    current_date = datetime.now().strftime("%d %b %Y · %a")
-
-    if tg_user_name:
-        message = f"<b>{user}</b> @{tg_user_name}\n{current_date}\n\n"
-    else:
-        message = f"<b>{user}</b>\n{current_date}\n\n"
-
-    grouped_tasks = user_df.groupby('project_name')  # group tasks by project
-
-    for project, group in grouped_tasks:
-        project_name = project if project else 'No project'
-        message += f"━\n<b>{project_name}</b>\n"
-        
-        # sort tasks on due date
-        sorted_group = sorted(
-            group.itertuples(),
-            key=lambda row: datetime.strptime(row.due_on, '%d-%m-%Y') if row.due_on and row.due_on != 'No DL' else datetime.max
-        )
-
-        # reset idx, enumerate from 1
-        for idx, row in enumerate(sorted_group, start=1):
-            task = row.task_name
-            url = row.url
-            notes = row.notes if row.notes else '-'  
-            due = row.due_on if row.due_on else 'No DL'
-
-            # crop notes if they exceed length limit
-            if len(notes) > max_note_len:
-                notes = notes[:max_note_len - 3].rstrip() + " (...)"
-
-            # escape special characters for HTML formatting
-            task_escaped = task.replace("<", "&lt;").replace(">", "&gt;").replace("&", "&amp;")
-            url_escaped = url.replace("<", "&lt;").replace(">", "&gt;").replace("&", "&amp;")
-
-            task_entry = f"{idx}. <a href='{url_escaped}'>{task_escaped}</a> · <code>{due}</code>\n{notes}\n\n"
-            message += task_entry
-
-        message += "\n"
-
-    # crop the whole message if it exceeds max_len
-    if max_len and len(message) > max_len:
-        message = message[:max_len].rstrip() + " (...)"
-
-    # handle extra notes
-    if 'extra_note' in user_df.columns and not user_df['extra_note'].isnull().iloc[0]:
-        extra_note = user_df['extra_note'].iloc[0]
-
-        # crop note if needed
-        if len(extra_note) > max_note_len:
-            extra_note = extra_note[:max_note_len - 3].rstrip() + " (...)"
-        message += f"<b>✲ Note:</b>\n{extra_note}\n\n"
-
-    return message
-
-
 def format_report(user_df, user, tg_user_name, max_len=None, max_note_len=None):
+    
     current_date = datetime.now().strftime("%d %b %Y · %a")
 
     if tg_user_name:
