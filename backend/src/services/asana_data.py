@@ -380,7 +380,10 @@ def format_df(df, extra_note, max_len=None, max_note_len=None):
     
     current_date = datetime.now().strftime("%d %b %Y · %a")
     message = f"<b>{current_date}</b>\n\n"
-
+    
+    # convert project list to str
+    df['project_name'] = df['project_name'].apply(lambda x: ', '.join(x) if isinstance(x, list) else x)
+                                                  
     # group tasks by project_name 
     grouped_tasks = df.groupby('project_name')
     
