@@ -661,20 +661,22 @@ def get_report(user_name, pm_users, ba_users):
             database=database
         )
         
-        # tasks data
+        # fetching tasks
         tasks_query = """
-            SELECT project_name, user_name, task_name, due_on, notes, url, extra_note
+            SELECT project_name, user_name, task_name, due_on, notes, url
             FROM tasks
             WHERE date_extracted = %s
         """
         params = (date.today(),)
         tasks_df = pd.read_sql(tasks_query, conn, params=params)
-
-        # convert 'due_on' 
+        
+        # convert due_on format to dd-mm-YYYY / No DL
         tasks_df['due_on'] = pd.to_datetime(tasks_df['due_on'], errors='coerce').dt.date
-        tasks_df['due_on'] = tasks_df['due_on'].apply(lambda x: x.strftime("%d-%m-%Y") if pd.notnull(x) else "No DL")
+        tasks_df['due_on'] = tasks_df['due_on'].apply(
+            lambda x: x.strftime("%d-%m-%Y") if pd.notnull(x) else "No DL"
+        )
 
-        # notes data
+        # fetching notes
         notes_query = """
             SELECT user_name, note
             FROM notes
@@ -682,21 +684,20 @@ def get_report(user_name, pm_users, ba_users):
         """
         notes_df = pd.read_sql(notes_query, conn, params=params)
         
-        # Prepare tasks_dict for output
+        # normalize project names
+        if not tasks_df.empty and 'project_name' in tasks_df.columns:
+            tasks_df['project_name'] = (
+                tasks_df['project_name']
+                .fillna('')  # replace NaN with empty str
+                .astype(str) # ensure str
+                .str.strip() # strip whitespace
+            )
+            tasks_df.loc[tasks_df['project_name'] == '', 'project_name'] = 'No project'
+        
+        # building tasks_dict with tasks_df of each user
         tasks_dict = {}
         
-        if tasks_df is not None and not tasks_df.empty:
-            # normalize project_name, empty/NaN to "No project"
-            if 'project_name' in tasks_df.columns:
-                tasks_df['project_name'] = (
-                    tasks_df['project_name']
-                    .fillna('') # replace NaN with ''
-                    .astype(str) # ensure it's str
-                    .str.strip() # strip whitespace
-                )
-                tasks_df.loc[tasks_df['project_name'] == '', 'project_name'] = 'No project'
-                
-            # list of unique users
+        if tasks_df is not None and not tasks_df.empty and notes_df is not None:
             users = tasks_df['user_name'].unique().tolist()
             
             for user in users:
@@ -706,21 +707,21 @@ def get_report(user_name, pm_users, ba_users):
                     logger.info(f"general report, skipping user: {user}")
                     continue 
                 
-                # filter tasks and notes for this user
+                # filter tasks and notes for the user
                 user_tasks = tasks_df[tasks_df['user_name'] == user].copy()
-                user_notes = notes_df[notes_df['user_name'] == user] if not notes_df.empty else pd.DataFrame()
+                user_notes = notes_df[notes_df['user_name'] == user] if not notes_df.empty else None
                 
-                # if there's a "note" entry in notes_df, place it in user_tasks as "extra_note"
-                if not user_notes.empty:
+                # merge notes into user_tasks as 'extra_note'
+                if user_notes is not None and not user_notes.empty:
                     note_value = user_notes['note'].iloc[0]
-                    user_tasks['extra_note'] = note_value
+                    user_tasks.loc[:, 'extra_note'] = note_value
                 else:
-                    user_tasks['extra_note'] = None
-                    
-                tasks_dict[user] = user_tasks.reset_index(drop=True)
+                    user_tasks.loc[:, 'extra_note'] = None
 
+                tasks_dict[user] = user_tasks.reset_index(drop=True)
+        
         return tasks_dict
-            
+
     except mysql.connector.Error as err:
         logger.error(f"DB error: {err}")
         return None
@@ -728,6 +729,7 @@ def get_report(user_name, pm_users, ba_users):
     finally:
         if conn is not None:
             conn.close()
+
 
 
 # REPORT FOR PM
