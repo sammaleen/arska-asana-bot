@@ -280,11 +280,7 @@ def get_tasks(user_id, workspace_gid):
     
     payload = {
         'completed_since': 'now',
-        'opt_fields': (
-            'name, due_on, projects, projects.name'
-            'section.name, assignee_section.name'
-            'notes, permalink_url, parent, parent.name'
-            ),
+        'opt_fields': 'name, due_on, projects, projects.name, section.name, notes, assignee_section.name, permalink_url',
         'limit': 100,
         'opt_pretty': True  
         }
