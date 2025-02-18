@@ -376,7 +376,8 @@ def format_df(df, extra_note, max_len=None, max_note_len=None):
             # escape all fields to avoid HTML issues
             task_escaped = html.escape(row.task_name)
             url_escaped = html.escape(row.url)
-            notes = html.escape(getattr(row, 'notes', '-')) if hasattr(row, 'notes') else '-'
+            notes = html.escape(row.notes) if row.notes else '-' 
+            #notes = html.escape(getattr(row, 'notes', '-')) if hasattr(row, 'notes') else '-'
             due = html.escape(row.due_on) if row.due_on else 'No DL'
 
             # format due date if available
