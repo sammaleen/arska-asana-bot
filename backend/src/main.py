@@ -49,12 +49,14 @@ logger = logging.getLogger(__name__)
 # set flask
 app = Flask(__name__)
 
-# COMMANDS ------
+
+# COMMANDS --------------
 
 # /CHATID command handler
 async def chat_id_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     await update.message.reply_text(f"chat ID is: `{chat_id}`", parse_mode="Markdown")
+
 
 # /START command handler
 async def start_command(update: Update, context: CallbackContext):
@@ -384,9 +386,9 @@ async def post_init(application: Application) -> None:
         )
     
     menu_button = {
-    "type": "default",
-    "text": "Menu",  
-    }
+        "type": "default",
+        "text": "Menu",  
+        }
     await application.bot.set_chat_menu_button()
 
 
@@ -449,7 +451,8 @@ def callback():
     }), 200
    
 
-# /REPORT scheduler
+# SCHEDULER
+# general report
 async def scheduled_report(context: ContextTypes.DEFAULT_TYPE):
     
     logger.info("running scheduled report ...")
@@ -482,8 +485,76 @@ async def scheduled_report(context: ContextTypes.DEFAULT_TYPE):
             text=report_message,
             parse_mode="HTML"
         )
+      
+# pm report
+async def scheduled_report_pm(context: ContextTypes.DEFAULT_TYPE):
     
-   
+    logger.info("running scheduled PM report ...")
+    
+    tasks_dict = get_report_pm(None, pm_users)  
+
+    if tasks_dict:
+        users = list(tasks_dict.keys())
+        logger.info(f"got scheduled PM report data for {len(users)} users: {users}")
+
+        for user, user_df in tasks_dict.items():
+            tg_user_name = get_tg_user(user)
+            user_report = format_report(user_df, user, tg_user_name, max_len=4000, max_note_len=85)
+            
+            try:
+                await context.bot.send_message(
+                    chat_id=report_chat_id_pm,
+                    text=user_report,
+                    parse_mode='HTML'
+                )
+            except Exception as err:
+                logger.error(f"error sending scheduled PM report: {err}")
+    else:
+        report_message = (
+            f"<b>{datetime.now().strftime('%d %b %Y · %a')}</b>\n\n"
+            "<code>No data is present for now</code>"
+        )
+        await context.bot.send_message(
+            chat_id=report_chat_id_pm,
+            text=report_message,
+            parse_mode="HTML"
+        )
+
+# ba report
+async def scheduled_report_ba(context: ContextTypes.DEFAULT_TYPE):
+    
+    logger.info("running scheduled BA report ...")
+    
+    tasks_dict = get_report_ba(None, ba_users)  
+
+    if tasks_dict:
+        users = list(tasks_dict.keys())
+        logger.info(f"got scheduled BA report data for {len(users)} users: {users}")
+
+        for user, user_df in tasks_dict.items():
+            tg_user_name = get_tg_user(user)
+            user_report = format_report(user_df, user, tg_user_name, max_len=4000, max_note_len=85)
+            
+            try:
+                await context.bot.send_message(
+                    chat_id=report_chat_id_ba,
+                    text=user_report,
+                    parse_mode='HTML'
+                )
+            except Exception as err:
+                logger.error(f"error sending scheduled BA report: {err}")
+    else:
+        report_message = (
+            f"<b>{datetime.now().strftime('%d %b %Y · %a')}</b>\n\n"
+            "<code>No data is present for now</code>"
+        )
+        await context.bot.send_message(
+            chat_id=report_chat_id_ba,
+            text=report_message,
+            parse_mode="HTML"
+        )
+
+
 # bot initialization 
 def create_bot_app():
     
@@ -521,14 +592,14 @@ def main():
     
     # scheduled run for PM report
     job_queue.run_daily(
-        scheduled_report,
+        scheduled_report_pm,
         time=time(hour=7, minute=5),
         days=(1, 2, 3, 4, 5)  # Mon-Fri
     )
     
     # scheduled run for BA report
     job_queue.run_daily(
-        scheduled_report,
+        scheduled_report_ba,
         time=time(hour=7, minute=5),
         days=(1, 2, 3, 4, 5)  # Mon-Fri
     )
