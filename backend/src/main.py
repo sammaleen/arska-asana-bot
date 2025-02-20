@@ -430,7 +430,7 @@ def callback():
     #user_name = user_name.encode('utf-8').decode('unicode_escape')
     
     # get permanent token from DB
-    user_name, user_token = get_user_data(user_name)
+    user_name, user_token = get_user_data(user_gid)
     user_name = user_name.encode('utf-8').decode('unicode_escape')
     
     if not user_token:
@@ -438,6 +438,7 @@ def callback():
         return jsonify({
             "message": "auth successful, but personal token is missing",
             "user_name": user_name,
+            "user_gid": user_gid,
             "user_token": "missing",
             "note":"to get personal token search for 'asana_users' table in Google Drive"
         }), 400
@@ -452,6 +453,7 @@ def callback():
     return jsonify({
         "message": "auth successful",
         "user_name": user_name,
+        "user_gid": user_gid,
         "user_token": "present, saved"
     }), 200
    
