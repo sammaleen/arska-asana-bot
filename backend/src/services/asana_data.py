@@ -85,7 +85,7 @@ def get_user_gid(access_token):
         return None
     
     
-# GET PERSONAL TOKEN AND GID from db 'users'
+# GET PERSONAL TOKEN AND NAME from db 'users'
 def get_user_data(user_gid):
     
     conn = None
@@ -96,7 +96,8 @@ def get_user_data(user_gid):
             user = db_user,
             password = db_pass,
             host = db_host,
-            database = database
+            database = database,
+            charset='utf8mb4'
             )
         cursor = conn.cursor(dictionary=True)
         
@@ -134,13 +135,15 @@ def save_asana_data(user_name, user_gid, user_token, user_id, tg_user):
                       "tg_user": tg_user, 
                       "user_name": user_name,
                       "user_token": user_token}
+        
         redis_client.set(redis_key, json.dumps(redis_data, ensure_ascii=False), ex=token_ttl)
         
         conn = mysql.connector.connect(
             user=db_user,
             password=db_pass,
             host = db_host,
-            database=database
+            database=database,
+            charset='utf8mb4'
         )
         cursor = conn.cursor()
     

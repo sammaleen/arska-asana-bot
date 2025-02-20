@@ -431,7 +431,7 @@ def callback():
     
     # get permanent token from DB
     user_name, user_token = get_user_data(user_gid)
-    user_name = user_name.encode('utf-8').decode('unicode_escape')
+    user_name = user_name.encode('utf-8').decode('utf-8')
     
     if not user_token:
         logger.error(f"failed to get permanent token from DB for user: {user_id}/{user_name}")
