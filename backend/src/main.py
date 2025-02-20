@@ -422,8 +422,8 @@ def callback():
     #user_name = get_user_name(access_token)  
     user_gid = get_user_gid(access_token)
     
-    if not user_name:
-        logger.error(f"failed to get asana user name for user: {user_id}")
+    if not user_gid:
+        logger.error(f"failed to get asana user gid for user: {user_id}")
         return "Auth failed: user is not in Asana ", 400
     
     # decode cyrillic 
