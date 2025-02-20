@@ -101,13 +101,13 @@ def get_user_data(user_gid):
         cursor = conn.cursor(dictionary=True)
         
         cursor.execute(
-            "SELECT user_name, user_token FROM users WHERE user_gid = %s", 
+            "SELECT name, user_token FROM users WHERE user_gid = %s", 
             (user_gid,)
             )
         result = cursor.fetchone()
         
         if result:
-            return result.get('user_name'), result.get('user_token')
+            return result.get('name'), result.get('user_token')
         else:
             return None, None
         
