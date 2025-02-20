@@ -449,7 +449,7 @@ def callback():
         logger.error(f"failed to save data for user: {user_id}/{user_name}")
         return jsonify({"message": "auth failed - couldn't save data in DB/cache"}), 500
     
-    logger.info(f"data saved for user: {user_id}/{user_name}")
+    logger.info(f"data saved for user: {user_id}/{user_name}/{user_gid}")
     return jsonify({
         "message": "auth successful",
         "user_name": user_name,
