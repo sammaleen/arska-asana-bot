@@ -7,13 +7,34 @@ import redis.exceptions
 import pandas as pd
 from datetime import datetime, date
 
-from config.load_env import db_user, db_host, db_pass, database, token_ttl, pm_users, ba_users
+from config.load_env import team_gid, asana_token, db_user, db_host, db_pass, database, token_ttl, pm_users, ba_users
 
 import logging
 logger = logging.getLogger(__name__)
 
 from services.redis_client import get_redis_client
 redis_client = get_redis_client()
+
+# GET all users and store in redis
+def get_asana_users(asana_token, team_gid):
+    
+    url = f"https://app.asana.com/api/1.0/teams/{team_gid}/users"
+    headers = {'Authorization': f'Bearer {asana_token}'}
+    
+    payload = {
+        'opt_fields': 'name'
+        }
+    
+    try:
+        response = requests.get(url, headers=headers, params=payload)
+        response.raise_for_status()
+        
+        response_json = response.json()
+        users_json = response_json.get('data',{}).get('name')
+        
+    except requests.exceptions.RequestException as err:
+        logging.error(f"network errror: {err} trying fetching Asana username")
+        return users_json
 
 
 # GET USER NAME with exchanged access token during auth
@@ -23,8 +44,7 @@ def get_user_name(access_token):
     headers = {'Authorization': f'Bearer {access_token}'}
     
     payload = {
-        'opt_fields': 'name',
-        'opt_pretty': True
+        'opt_fields': 'name'
     }
     
     try:
@@ -38,10 +58,35 @@ def get_user_name(access_token):
     except requests.exceptions.RequestException as err:
         logging.error(f"network errror: {err} trying fetching Asana username")
         return None
+
+
+#GET USER GID
+def get_user_gid(access_token):
+    
+    url = 'https://app.asana.com/api/1.0/users/me'
+    headers = {'Authorization': f'Bearer {access_token}'}
+    
+    payload = {
+        'opt_fields': 'name'
+    }
+    
+    try:
+        response = requests.get(url, headers=headers, params=payload)
+        response.raise_for_status()
+        
+        response_json = response.json()
+        user_name = response_json.get('data',{}).get('name')
+        user_gid = response_json.get('data',{}).get('gid')
+        logging.info(f"get user_gid for user: {user_name}")
+        return user_gid
+    
+    except requests.exceptions.RequestException as err:
+        logging.error(f"network errror: {err} trying fetching user_gid")
+        return None
     
     
 # GET PERSONAL TOKEN AND GID from db 'users'
-def get_user_data(user_name):
+def get_user_data(user_gid):
     
     conn = None
     cursor = None
@@ -56,18 +101,18 @@ def get_user_data(user_name):
         cursor = conn.cursor(dictionary=True)
         
         cursor.execute(
-            "SELECT user_gid, user_token FROM users WHERE name = %s", 
-            (user_name,)
+            "SELECT user_name, user_token FROM users WHERE user_gid = %s", 
+            (user_gid,)
             )
         result = cursor.fetchone()
         
         if result:
-            return result.get('user_gid'), result.get('user_token')
+            return result.get('user_name'), result.get('user_token')
         else:
             return None, None
         
     except mysql.connector.Error as err:
-        logging.error(f"DB error: {err} for user: {user_name}")
+        logging.error(f"DB error: {err} for user: {user_gid}")
         return None, None
         
     finally:

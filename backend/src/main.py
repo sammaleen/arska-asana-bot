@@ -14,6 +14,7 @@ from services.redis_client import get_redis_client
 from services.oauth_service import gen_oauth_link, store_oauth_data, get_oauth_data, get_token
 
 from services.asana_data import (get_user_name,
+                                 get_user_gid,
                                  get_user_data,
                                  save_asana_data,
                                  get_redis_data,
@@ -418,16 +419,20 @@ def callback():
         return "Auth failed: couldn't get access token", 400
         
     # get asana user name via request to asana api
-    user_name = get_user_name(access_token)  
+    #user_name = get_user_name(access_token)  
+    user_gid = get_user_gid(access_token)
+    
     if not user_name:
         logger.error(f"failed to get asana user name for user: {user_id}")
         return "Auth failed: user is not in Asana ", 400
     
     # decode cyrillic 
-    user_name = user_name.encode('utf-8').decode('unicode_escape')
+    #user_name = user_name.encode('utf-8').decode('unicode_escape')
     
     # get permanent token from DB
-    user_gid, user_token = get_user_data(user_name)
+    user_name, user_token = get_user_data(user_name)
+    user_name = user_name.encode('utf-8').decode('unicode_escape')
+    
     if not user_token:
         logger.error(f"failed to get permanent token from DB for user: {user_id}/{user_name}")
         return jsonify({
