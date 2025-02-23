@@ -170,7 +170,7 @@ async def add_notes_callback(update: Update, context: CallbackContext):
 
   
 # handle user response 
-async def note_input(update: Update, context: CallbackContext):
+async def note_input_(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
     user_gid, user_name, user_token, tg_user = get_redis_data(user_id)
     chat_id = note_input_state.get(user_id, {}).get("chat_id")
@@ -204,8 +204,48 @@ async def note_input(update: Update, context: CallbackContext):
     else:
         await update.message.reply_text("To add notes use '/mytasks' command -> 'Add notes' button")
         logger.info("user tried to add notes without initiating from the correct button")
-
         
+
+
+async def note_input(update: Update, context: CallbackContext):
+    
+    user_id = update.effective_user.id
+    if user_id not in note_input_state:
+        return
+    
+    user_gid, user_name, user_token, tg_user = get_redis_data(user_id)
+    chat_id = note_input_state[user_id].get("chat_id")
+    
+    if not chat_id:
+        return
+    
+    if not update.effective_message or not update.effective_message.text:
+        return
+    
+
+    note_text = update.effective_message.text
+    note_input_state[user_id]["note"] = note_text 
+    
+    keyboard = [
+        [
+            InlineKeyboardButton("Save 💾", callback_data="confirm_note"),
+            InlineKeyboardButton("Re-write ✍", callback_data="edit_note"),
+        ]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    try:
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=f"Ваша заметка:\n\n*{note_text}*\n\nПодтвердите сохранение или перепишите заметку",
+            reply_markup=reply_markup,
+            parse_mode="Markdown"
+        )
+        logger.info(f"note '{note_text}' sent to user {user_id}/{user_name} for confirmation")
+    except Exception as err:
+        logger.error(f"error while sending message to chat {chat_id}/{user_name}: {err}")
+
+
 # handle note saving/rewriting 
 async def process_note(update: Update, context: CallbackContext):
     query = update.callback_query
