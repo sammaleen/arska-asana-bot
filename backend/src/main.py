@@ -63,7 +63,7 @@ async def chat_id_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def start_command(update: Update, context: CallbackContext):
     
     user_id = update.effective_user.id
-    tg_user = update.effective_user.username
+    tg_user = update.effective_user.username or ""
     
     oauth_link, state = gen_oauth_link()  # generate oauth link
     store_oauth_data(user_id, tg_user, state) # store the state in Redis along with user_id mapping
