@@ -37,7 +37,8 @@ def get_asana_users(asana_token, team_gid):
         
     except requests.exceptions.RequestException as err:
         logging.error(f"network errror: {err} trying fetching Asana username")
-        return asana_users
+    
+    return asana_users
 
 
 # GET USER NAME with exchanged access token during auth
@@ -230,7 +231,7 @@ def get_redis_data(user_id):
             
             # update redis cache
             redis_data = {"user_gid": user_gid, "tg_user": tg_user, "user_name": user_name, "user_token": user_token}
-            redis_client.set(redis_key, json.dumps(redis_data, ensure_ascii=False), ex=token_ttl)
+            redis_client.set(redis_key, json.dumps(redis_data, ensure_ascii=False))
             
             logger.info(f"user data retrieved from DB and cached in Redis for user: {user_id}/{user_name}")
             return user_gid, user_name, user_token, tg_user
