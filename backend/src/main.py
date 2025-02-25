@@ -26,11 +26,14 @@ from services.asana_data import (get_user_name,
                                  get_report_pm,
                                  get_report_ba,
                                  get_tg_user,
-                                 format_report
+                                 format_report,
+                                 get_asana_users
                                  )
 
 from config.load_env import (bot_token,
+                             asana_token,
                              workspace_gid,
+                             team_gid,
                              gs_url,
                              report_chat_id, 
                              report_chat_id_pm, 
@@ -291,9 +294,23 @@ async def process_note(update: Update, context: CallbackContext):
    
 # /REPORT command handler    
 async def report_command(update: Update, context: CallbackContext):
+    
     user_id = update.effective_user.id
     user_gid, user_name, user_token, tg_user = get_redis_data(user_id)
     
+    arska_gids = get_asana_users(asana_token, team_gid)
+    
+    # if user not from arska team
+    if user_gid not in arska_gids:
+        report_message = "<code>Sorry, you are not authorized to see the data</code>"
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=report_message,
+            parse_mode="HTML"
+        )
+        return  
+        
+    # fetch tasks for report
     tasks_dict = get_report(user_name, pm_users, ba_users)
     
     if tasks_dict:
@@ -335,6 +352,18 @@ async def pm_report_command(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
     user_gid, user_name, user_token, tg_user = get_redis_data(user_id)
     
+    arska_gids = get_asana_users(asana_token, team_gid)
+    
+    # if user not from arska team
+    if user_gid not in arska_gids:
+        report_message = "<code>Sorry, you are not authorized to see the data</code>"
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=report_message,
+            parse_mode="HTML"
+        )
+        return 
+    
     tasks_dict = get_report_pm(user_name, pm_users)
     
     if tasks_dict:
@@ -375,6 +404,18 @@ async def pm_report_command(update: Update, context: CallbackContext):
 async def ba_report_command(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
     user_gid, user_name, user_token, tg_user = get_redis_data(user_id)
+    
+    arska_gids = get_asana_users(asana_token, team_gid)
+    
+    # if user not from arska team
+    if user_gid not in arska_gids:
+        report_message = "<code>Sorry, you are not authorized to see the data</code>"
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=report_message,
+            parse_mode="HTML"
+        )
+        return 
     
     tasks_dict = get_report_ba(user_name, ba_users)
     

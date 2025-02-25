@@ -18,6 +18,8 @@ redis_client = get_redis_client()
 # GET all users and store in redis
 def get_asana_users(asana_token, team_gid):
     
+    asana_users = []
+    
     url = f"https://app.asana.com/api/1.0/teams/{team_gid}/users"
     headers = {'Authorization': f'Bearer {asana_token}'}
     
@@ -29,12 +31,13 @@ def get_asana_users(asana_token, team_gid):
         response = requests.get(url, headers=headers, params=payload)
         response.raise_for_status()
         
-        response_json = response.json()
-        users_json = response_json.get('data',{}).get('name')
+        users_json = response.json()
+        users_df = pd.json_normalize(users_json['data'], max_level=1)
+        asana_users = users_df['gid'].tolist()
         
     except requests.exceptions.RequestException as err:
         logging.error(f"network errror: {err} trying fetching Asana username")
-        return users_json
+        return asana_users
 
 
 # GET USER NAME with exchanged access token during auth
