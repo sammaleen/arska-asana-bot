@@ -1,0 +1,31 @@
+name: Deploy to PythonAnywhere
+
+on:
+  push:
+    branches: [ "main" ] 
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Check out the repo
+      - uses: actions/checkout@v3
+
+      # 2. Set up SSH
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.PYTHONANYWHERE_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan ssh.eu.pythonanywhere.com >> ~/.ssh/known_hosts
+
+      # 3. SSH into PythonAnywhere and pull the latest code
+      - name: SSH into PythonAnywhere and pull latest code
+        run: |
+          ssh sammaleen@ssh.eu.pythonanywhere.com "cd /home/sammaleen/arska-asana-bot && git pull origin main"
+
+      # 4. Reload the web app (optional)
+      - name: Reload web app
+        run: |
+          ssh sammaleen@ssh.eu.pythonanywhere.com "touch /var/www/arska-sammaleen_eu_pythonanywhere_com_wsgi.py"
