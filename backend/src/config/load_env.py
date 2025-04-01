@@ -51,3 +51,5 @@ token_ttl = 518400 # store cache for 6 days
 gs_url = os.getenv("GS_URL")
 
 
+print(report_chat_id_pm)
+print(report_chat_id_ar)
