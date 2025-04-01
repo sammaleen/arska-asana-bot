@@ -36,6 +36,7 @@ from config.load_env import (bot_token,
                              team_gid,
                              gs_url,
                              report_chat_id, 
+                             report_chat_id_ar,
                              report_chat_id_pm, 
                              report_chat_id_ba,
                              pm_users,
@@ -539,7 +540,7 @@ def callback():
     }), 200
    
 
-# SCHEDULER
+# SCHEDULERS ---------------------
 # general report
 async def scheduled_report(context: ContextTypes.DEFAULT_TYPE):
     
@@ -573,6 +574,42 @@ async def scheduled_report(context: ContextTypes.DEFAULT_TYPE):
             text=report_message,
             parse_mode="HTML"
         )
+      
+      
+# general report
+async def scheduled_report_ar(context: ContextTypes.DEFAULT_TYPE):
+    
+    logger.info("running scheduled report for ARSKA ...")
+    
+    tasks_dict = get_report(None, pm_users, ba_users)  
+
+    if tasks_dict:
+        users = list(tasks_dict.keys())
+        logger.info(f"got scheduled report data for {len(users)} users: {users}")
+
+        for user, user_df in tasks_dict.items():
+            tg_user_name = get_tg_user(user)
+            user_report = format_report(user_df, user, tg_user_name, max_len=4000, max_note_len=85)
+            
+            try:
+                await context.bot.send_message(
+                    chat_id=report_chat_id,
+                    text=user_report,
+                    parse_mode='HTML'
+                )
+            except Exception as err:
+                logger.error(f"error sending scheduled report: {err}")
+    else:
+        report_message = (
+            f"<b>{datetime.now().strftime('%d %b %Y · %a')}</b>\n\n"
+            "<code>No data is present for now</code>"
+        )
+        await context.bot.send_message(
+            chat_id=report_chat_id_ar,
+            text=report_message,
+            parse_mode="HTML"
+        )      
+      
       
 # pm report
 async def scheduled_report_pm(context: ContextTypes.DEFAULT_TYPE):
@@ -671,27 +708,27 @@ def main():
     
     job_queue = bot_app.job_queue
     
-    # scheduled run for general report 
+    # scheduled run for TEST
     job_queue.run_daily(
         scheduled_report,
         time=time(hour=7, minute=5),
         days=(1, 2, 3, 4, 5)  # Mon-Fri
     )
     
-    # scheduled run for PM report
+    # scheduled run for MAIN 
+    job_queue.run_daily(
+        scheduled_report_ar,
+        time=time(hour=7, minute=5),
+        days=(1, 2, 3, 4, 5)  # Mon-Fri
+    )
+    
+    # scheduled run for PM 
     job_queue.run_daily(
         scheduled_report_pm,
         time=time(hour=7, minute=5),
         days=(1, 2, 3, 4, 5)  # Mon-Fri
     )
     
-    # scheduled run for BA report
-    job_queue.run_daily(
-        scheduled_report_ba,
-        time=time(hour=7, minute=5),
-        days=(1, 2, 3, 4, 5)  # Mon-Fri
-    )
-      
     #job_queue.run_once(scheduled_report, when=5)  
 
     bot_app.run_polling()
