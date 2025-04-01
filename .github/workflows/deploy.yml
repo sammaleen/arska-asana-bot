@@ -23,7 +23,7 @@ jobs:
       # 3. SSH into PythonAnywhere and pull the latest code
       - name: SSH into PythonAnywhere and pull latest code
         run: |
-          ssh -v sammaleen@ssh.eu.pythonanywhere.com "cd /home/sammaleen/arska-asana-bot && git pull origin main"
+          ssh -v sammaleen@ssh.eu.pythonanywhere.com "cd /home/sammaleen/arska_asana_bot && git pull origin main"
 
       # 4. Reload the web app (optional)
       - name: Reload web app
