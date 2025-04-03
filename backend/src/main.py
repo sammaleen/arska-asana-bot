@@ -707,7 +707,7 @@ def main():
     bot_app = create_bot_app()   
     
     job_queue = bot_app.job_queue
-    #
+    
     # scheduled run for TEST
     job_queue.run_daily(
         scheduled_report,
@@ -730,11 +730,11 @@ def main():
     )
     
     # scheduled run for BA
-    job_queue.run_daily(
-        scheduled_report_ba,
-        time=time(hour=7, minute=5),
-        days=(1, 2, 3, 4, 5)  # Mon-Fri
-    )
+    #job_queue.run_daily(
+        #scheduled_report_ba,
+        #time=time(hour=7, minute=5),
+        #days=(1, 2, 3, 4, 5)  # Mon-Fri
+    #)
     
     #job_queue.run_once(scheduled_report, when=5)  
 
