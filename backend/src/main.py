@@ -544,7 +544,7 @@ def callback():
 # general report
 async def scheduled_report(context: ContextTypes.DEFAULT_TYPE):
     
-    logger.info("running scheduled report ...")
+    logger.info("running scheduled report for TEST...")
     
     tasks_dict = get_report(None, pm_users, ba_users)  
 
@@ -563,7 +563,7 @@ async def scheduled_report(context: ContextTypes.DEFAULT_TYPE):
                     parse_mode='HTML'
                 )
             except Exception as err:
-                logger.error(f"error sending scheduled report: {err}")
+                logger.error(f"error sending scheduled report for TEST: {err}")
     else:
         report_message = (
             f"<b>{datetime.now().strftime('%d %b %Y · %a')}</b>\n\n"
@@ -593,12 +593,12 @@ async def scheduled_report_ar(context: ContextTypes.DEFAULT_TYPE):
             
             try:
                 await context.bot.send_message(
-                    chat_id=report_chat_id,
+                    chat_id=report_chat_id_ar,
                     text=user_report,
                     parse_mode='HTML'
                 )
             except Exception as err:
-                logger.error(f"error sending scheduled report: {err}")
+                logger.error(f"error sending scheduled report for ARSKA: {err}")
     else:
         report_message = (
             f"<b>{datetime.now().strftime('%d %b %Y · %a')}</b>\n\n"
@@ -633,7 +633,7 @@ async def scheduled_report_pm(context: ContextTypes.DEFAULT_TYPE):
                     parse_mode='HTML'
                 )
             except Exception as err:
-                logger.error(f"error sending scheduled PM report: {err}")
+                logger.error(f"error sending scheduled report for PM: {err}")
     else:
         report_message = (
             f"<b>{datetime.now().strftime('%d %b %Y · %a')}</b>\n\n"
