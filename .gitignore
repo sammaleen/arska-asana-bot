@@ -5,6 +5,7 @@ users_to_skip.json
 .ipynb_checkpoints
 asana_bot.ipynb
 bot_tests.ipynb
+test.js
 
 
 
