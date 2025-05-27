@@ -22,6 +22,7 @@ report_chat_id = int(os.getenv("REPORT_CHAT_ID")) # test chat
 report_chat_id_ar = int(os.getenv("REPORT_CHAT_ID_AR")) # main chat
 report_chat_id_pm = os.getenv("REPORT_CHAT_ID_PM") # PM's chat
 report_chat_id_ba = os.getenv("REPORT_CHAT_ID_BA") # BA's chat
+report_chat_id_main = os.getenv("REPORT_CHAT_ID_MAIN") # MAIN
 
 # user lists from json
 cwdir = os.path.dirname(os.path.abspath(__file__))

@@ -39,6 +39,7 @@ from config.load_env import (bot_token,
                              report_chat_id_ar,
                              report_chat_id_pm, 
                              report_chat_id_ba,
+                             report_chat_id_main,
                              pm_users,
                              ba_users
                              )
@@ -680,6 +681,74 @@ async def scheduled_report_ba(context: ContextTypes.DEFAULT_TYPE):
         )
 
 
+# main report separate
+async def scheduled_report_main(context: ContextTypes.DEFAULT_TYPE):
+    
+    logger.info("running scheduled report for ARSKA ...")
+    
+    tasks_dict = get_report(None, pm_users, ba_users)  
+
+    if tasks_dict:
+        users = list(tasks_dict.keys())
+        logger.info(f"got scheduled report data for {len(users)} users: {users}")
+
+        for user, user_df in tasks_dict.items():
+            tg_user_name = get_tg_user(user)
+            user_report = format_report(user_df, user, tg_user_name, max_len=4000, max_note_len=60)
+            
+            try:
+                await context.bot.send_message(
+                    chat_id=report_chat_id_main,
+                    text=user_report,
+                    parse_mode='HTML'
+                )
+            except Exception as err:
+                logger.error(f"error sending scheduled report for ARSKA: {err}")
+    else:
+        report_message = (
+            f"<b>{datetime.now().strftime('%d %b %Y · %a')}</b>\n\n"
+            "<code>No data is present for now</code>"
+        )
+        await context.bot.send_message(
+            chat_id=report_chat_id_main,
+            text=report_message,
+            parse_mode="HTML"
+        )      
+        
+async def scheduled_report_main_pm(context: ContextTypes.DEFAULT_TYPE):
+    
+    logger.info("running scheduled PM report ...")
+    
+    tasks_dict = get_report_pm(None, pm_users)  
+
+    if tasks_dict:
+        users = list(tasks_dict.keys())
+        logger.info(f"got scheduled PM report data for {len(users)} users: {users}")
+
+        for user, user_df in tasks_dict.items():
+            tg_user_name = get_tg_user(user)
+            user_report = format_report(user_df, user, tg_user_name, max_len=4000, max_note_len=60)
+            
+            try:
+                await context.bot.send_message(
+                    chat_id=report_chat_id_main,
+                    text=user_report,
+                    parse_mode='HTML'
+                )
+            except Exception as err:
+                logger.error(f"error sending scheduled report for PM: {err}")
+    else:
+        report_message = (
+            f"<b>{datetime.now().strftime('%d %b %Y · %a')}</b>\n\n"
+            "<code>No data is present for now</code>"
+        )
+        await context.bot.send_message(
+            chat_id=report_chat_id_main,
+            text=report_message,
+            parse_mode="HTML"
+        )   
+        
+        
 # bot initialization 
 def create_bot_app():
     
@@ -716,18 +785,35 @@ def main():
     #)
     
     # scheduled run for MAIN 
+    #job_queue.run_daily(
+    #    scheduled_report_ar,
+    #    time=time(hour=7, minute=5),
+    #    days=(1, 2, 3, 4, 5)  # Mon-Fri
+    #)
+    
+    # scheduled run for MAIN separate 
     job_queue.run_daily(
-        scheduled_report_ar,
+        scheduled_report_main,
         time=time(hour=7, minute=5),
         days=(1, 2, 3, 4, 5)  # Mon-Fri
-    )
+        )
+    
+    job_queue.run_once(scheduled_report_main, when=5)
+    
+    job_queue.run_daily(
+        scheduled_report_main_pm,
+        time=time(hour=7, minute=5),
+        days=(1, 2, 3, 4, 5)  # Mon-Fri
+        )
+    
+    job_queue.run_once(scheduled_report_main_pm, when=5)
     
     # scheduled run for PM 
-    job_queue.run_daily(
-        scheduled_report_pm,
-        time=time(hour=7, minute=5),
-        days=(1, 2, 3, 4, 5)  # Mon-Fri
-    )
+    #job_queue.run_daily(
+        #scheduled_report_pm,
+        #time=time(hour=7, minute=5),
+        #days=(1, 2, 3, 4, 5)  # Mon-Fri
+    #)
     
     # scheduled run for BA
     #job_queue.run_daily(
