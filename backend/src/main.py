@@ -25,8 +25,10 @@ from services.asana_data import (get_user_name,
                                  get_report,
                                  get_report_pm,
                                  get_report_ba,
+                                 get_report_av,
                                  get_tg_user,
                                  format_report,
+                                 format_report_av,
                                  get_asana_users
                                  )
 
@@ -40,8 +42,10 @@ from config.load_env import (bot_token,
                              report_chat_id_pm, 
                              report_chat_id_ba,
                              report_chat_id_main,
+                             report_chat_id_av,
                              pm_users,
-                             ba_users
+                             ba_users,
+                             av_users
                              )
 
 # set logger 
@@ -523,7 +527,7 @@ def callback():
             "user_name": user_name,
             "user_gid": user_gid,
             "user_token": "missing",
-            "note":"to get personal token search for 'asana_users' table in Google Drive"
+            "note":"to get personal token search for 'asana_users' table in Google Sheets"
         }), 400
     
     # saving extracted data to DB/cache
@@ -748,6 +752,40 @@ async def scheduled_report_main_pm(context: ContextTypes.DEFAULT_TYPE):
             parse_mode="HTML"
         )   
         
+
+async def scheduled_report_av(context: ContextTypes.DEFAULT_TYPE):
+    
+    logger.info("running scheduled report for AV ...")
+    
+    tasks_dict = get_report_av(None, av_users)  
+
+    if tasks_dict:
+        users = list(tasks_dict.keys())
+        logger.info(f"got scheduled AV report data for {len(users)} users: {users}")
+
+        for user, user_df in tasks_dict.items():
+            tg_user_name = get_tg_user(user)
+            user_report = format_report_av(user_df, user, tg_user_name, max_len=4000, max_note_len=60)
+            
+            try:
+                await context.bot.send_message(
+                    chat_id=report_chat_id_av,
+                    text=user_report,
+                    parse_mode='HTML'
+                )
+            except Exception as err:
+                logger.error(f"error sending scheduled report for AV: {err}")
+    else:
+        report_message = (
+            f"<b>{datetime.now().strftime('%d %b %Y · %a')}</b>\n\n"
+            "<code>No data is present for now</code>"
+        )
+        await context.bot.send_message(
+            chat_id=report_chat_id_av,
+            text=report_message,
+            parse_mode="HTML"
+        )   
+        
         
 # bot initialization 
 def create_bot_app():
@@ -799,15 +837,14 @@ def main():
         )
     
     job_queue.run_once(scheduled_report_main, when=5)
+    job_queue.run_once(scheduled_report_av, when=1)
     
     job_queue.run_daily(
         scheduled_report_main_pm,
         time=time(hour=7, minute=5),
         days=(1, 2, 3, 4, 5)  # Mon-Fri
         )
-    
-    job_queue.run_once(scheduled_report_main_pm, when=5)
-    
+     
     # scheduled run for PM 
     #job_queue.run_daily(
         #scheduled_report_pm,
@@ -821,10 +858,7 @@ def main():
         #time=time(hour=7, minute=5),
         #days=(1, 2, 3, 4, 5)  # Mon-Fri
     #)
-    
-
-    #job_queue.run_once(scheduled_report, when=5)  
-
+ 
     bot_app.run_polling()
 
 if __name__ == "__main__":

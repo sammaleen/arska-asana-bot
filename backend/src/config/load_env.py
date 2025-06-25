@@ -23,6 +23,7 @@ report_chat_id_ar = int(os.getenv("REPORT_CHAT_ID_AR")) # main chat
 report_chat_id_pm = os.getenv("REPORT_CHAT_ID_PM") # PM's chat
 report_chat_id_ba = os.getenv("REPORT_CHAT_ID_BA") # BA's chat
 report_chat_id_main = os.getenv("REPORT_CHAT_ID_MAIN") # MAIN
+report_chat_id_av = os.getenv("REPORT_CHAT_ID_AV")
 
 # user lists from json
 cwdir = os.path.dirname(os.path.abspath(__file__))
@@ -34,6 +35,7 @@ with open(json_path, 'r', encoding='utf-8') as config_file:
     
 pm_users = config.get('PM','')
 ba_users = config.get('BA','')
+av_users = config.get('AV','')
 
 # database 
 db_host = os.getenv("DB_HOST")
@@ -52,5 +54,5 @@ token_ttl = 518400 # store cache for 6 days
 gs_url = os.getenv("GS_URL")
 
 
-print(report_chat_id_pm)
-print(report_chat_id_ar)
+print(report_chat_id_av)
+print(av_users)
