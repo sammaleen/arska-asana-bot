@@ -845,7 +845,7 @@ def main():
     job_queue.run_daily(
         scheduled_report_av,
         time=time(hour=7, minute=5),
-        days=(1, 2, 3, 4, 5, 6, 7)  # Mon-Sun
+        days=(0, 1, 2, 3, 4, 5, 6)  # Mon-Sun
         )
      
      
