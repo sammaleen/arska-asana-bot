@@ -765,7 +765,7 @@ async def scheduled_report_av(context: ContextTypes.DEFAULT_TYPE):
 
         for user, user_df in tasks_dict.items():
             tg_user_name = get_tg_user(user)
-            user_report = format_report_av(user_df, user, tg_user_name, max_len=4000, max_note_len=60)
+            user_report = format_report(user_df, user, tg_user_name, max_len=4000, max_note_len=60)
             
             try:
                 await context.bot.send_message(
