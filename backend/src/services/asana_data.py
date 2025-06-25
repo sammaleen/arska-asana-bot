@@ -1001,7 +1001,7 @@ def format_report_av(user_df, user, tg_user_name, max_len=None, max_note_len=Non
     grouped_tasks = user_df.groupby('project_name')  # group tasks by project
 
     for project, group in grouped_tasks:
-        project_name = project  
+        project_name = html.escape(project)  
         message += f"━\n<b>{project_name}</b>\n"
         
         # sort tasks on due date
@@ -1028,10 +1028,6 @@ def format_report_av(user_df, user, tg_user_name, max_len=None, max_note_len=Non
             message += task_entry
 
         message += "\n"
-
-    # crop the whole message if it exceeds max_len
-    if max_len and len(message) > max_len:
-        message = message[:max_len].rstrip() + " (...)"
 
     # handle extra notes
     if 'extra_note' in user_df.columns:
