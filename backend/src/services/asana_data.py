@@ -991,65 +991,53 @@ def format_report(user_df, user, tg_user_name, max_len=None, max_note_len=None):
 # FORMAT report for AV
 def format_report_av(user_df, user, tg_user_name, max_len=None, max_note_len=None):
     
-    current_date = datetime.now().strftime("%d %b %Y · %a")
+    def esc(text):
+        return html.escape(text, quote=False)
 
+    now = datetime.now().strftime("%d %b %Y · %a")
     if tg_user_name:
-        message = f"<b>{user}</b> @{tg_user_name}\n{current_date}\n\n"
+        header = f"<b>{esc(user)}</b> @{esc(tg_user_name)}\n{now}\n\n"
     else:
-        message = f"<b>{user}</b>\n{current_date}\n\n"
+        header = f"<b>{esc(user)}</b>\n{now}\n\n"
 
-    grouped_tasks = user_df.groupby('project_name')  # group tasks by project
+    segments = [header]
+    trailer = " (...)"
 
-    for project, group in grouped_tasks:
-        project_name = project  
-        message += f"━\n<b>{project_name}</b>\n"
-        
-        # sort tasks on due date
-        def parse_due(x):
-            try:
-                return datetime.strptime(x, '%d-%m-%Y')
-            except ValueError:
-                # 'No DL' or invalid => treat as something far in the future
-                return datetime.max
+    # sort tasks on due date
+    def parse_due(x):
+        try:
+            return datetime.strptime(x, "%d-%m-%Y")
+        except:
+            return datetime.max
 
-        sorted_group = sorted(group.itertuples(), key=lambda row: parse_due(row.due_on))
-
-        # reset idx, enumerate from 1
-        for idx, row in enumerate(sorted_group, start=1):
-            task = row.task_name
-            url = row.url
-            due = row.due_on if row.due_on else 'No DL'
-
-            # escape characters for HTML formatting
-            task_escaped = (task.replace("<", "&lt;")
-                                 .replace(">", "&gt;")
-                                 .replace("&", "&amp;"))
-            url_escaped = (url.replace("<", "&lt;")
-                               .replace(">", "&gt;")
-                               .replace("&", "&amp;"))
-
-            task_entry = f"{idx}. <a href='{url_escaped}'>{task_escaped}</a> · <code>{due}</code>\n\n"
-            message += task_entry
-
-        message += "\n"
-
-    # crop the whole message if it exceeds max_len
-    if max_len and len(message) > max_len:
-        message = message[:max_len].rstrip() + " (...)"
+    for project, group in user_df.groupby('project_name'):  # group tasks by project
+        seg = f"━\n<b>{esc(project)}</b>\n"
+        tasks = sorted(group.itertuples(), key=lambda row: parse_due(row.due_on))
+        for idx, row in enumerate(tasks, start=1):  # reset idx, enumerate from 1
+            seg += (
+                f"{idx}. <a href=\"{esc(row.url)}\">{esc(row.task_name)}</a>"
+                f" · <code>{esc(row.due_on or 'No DL')}</code>\n\n"
+            )
+        segments.append(seg)
 
     # handle extra notes
     if 'extra_note' in user_df.columns:
-        first_note = user_df['extra_note'].dropna()
-        
-        if not first_note.empty:
-            extra_note = first_note.iloc[0]
-            
-            # crop note if needed
-            if max_note_len and len(extra_note) > max_note_len:
-                extra_note = extra_note[:max_note_len - 3].rstrip() + " (...)"
-            message += f"<b>✲ Note:</b>\n{extra_note}\n\n"
+        extras = user_df['extra_note'].dropna()
+        if not extras.empty:
+            note = extras.iloc[0]
+            if max_note_len and len(note) > max_note_len:  # crop note if needed
+                note = note[:max_note_len - 3].rstrip() + " (...)"
+            segments.append(f"<b>✲ Note:</b>\n{esc(note)}\n\n")
+
+    message = ""
+    for seg in segments:
+        if max_len and len(message) + len(seg) + len(trailer) > max_len:  # crop the whole message if it exceeds max_len
+            message += trailer
+            break
+        message += seg
 
     return message
+
 
 #GET TG USER
 def get_tg_user(user_name):
