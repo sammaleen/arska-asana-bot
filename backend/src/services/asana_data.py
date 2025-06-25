@@ -1018,22 +1018,12 @@ def format_report_av(user_df, user, tg_user_name, max_len=None, max_note_len=Non
         for idx, row in enumerate(sorted_group, start=1):
             task = row.task_name
             url = row.url
-            #notes = row.notes if row.notes else '-'  
             due = row.due_on if row.due_on else 'No DL'
-
-            # crop notes if they exceed length limit
-            #if max_note_len and len(notes) > max_note_len:
-            #    notes = notes[:max_note_len - 3].rstrip() + " (...)"
-
+            
             # escape characters for HTML formatting
-            task_escaped = (task.replace("<", "&lt;")
-                                 .replace(">", "&gt;")
-                                 .replace("&", "&amp;"))
-            url_escaped = (url.replace("<", "&lt;")
-                               .replace(">", "&gt;")
-                               .replace("&", "&amp;"))
+            task_escaped = html.escape(task)
+            url_escaped = html.escape(url)
 
-            #task_entry = f"{idx}. <a href='{url_escaped}'>{task_escaped}</a> · <code>{due}</code>\n{notes}\n\n"
             task_entry = f"{idx}. <a href='{url_escaped}'>{task_escaped}</a> · <code>{due}</code>\n\n"
             message += task_entry
 
@@ -1053,7 +1043,14 @@ def format_report_av(user_df, user, tg_user_name, max_len=None, max_note_len=Non
             # crop note if needed
             if max_note_len and len(extra_note) > max_note_len:
                 extra_note = extra_note[:max_note_len - 3].rstrip() + " (...)"
-            message += f"<b>✲ Note:</b>\n{extra_note}\n\n"
+            
+            # escape the extra_note content
+            extra_note_escaped = html.escape(extra_note)
+            message += f"<b>✲ Note:</b>\n{extra_note_escaped}\n\n"
+
+    # crop the whole message if it exceeds max_len
+    if max_len and len(message) > max_len:
+        message = message[:max_len].rstrip() + " (...)"
 
     return message
 
