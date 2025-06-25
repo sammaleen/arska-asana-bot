@@ -1049,6 +1049,12 @@ def format_report_av(user_df, user, tg_user_name, max_len=None, max_note_len=Non
                 extra_note = extra_note[:max_note_len - 3].rstrip() + " (...)"
             message += f"<b>✲ Note:</b>\n{extra_note}\n\n"
 
+    # DEBUG: Log the problematic area
+    logger.info(f"Total message length: {len(message)}")
+    if len(message) > 4974:
+        logger.info(f"Content around byte 4974: {repr(message[4960:4990])}")
+        logger.info(f"Content at byte 4974: {repr(message[4974])}")
+    
     return message
 
 #GET TG USER
