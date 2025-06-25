@@ -990,7 +990,6 @@ def format_report(user_df, user, tg_user_name, max_len=None, max_note_len=None):
 
 # FORMAT report for AV
 def format_report_av(user_df, user, tg_user_name, max_len=None, max_note_len=None):
-    
     def esc(text):
         return html.escape(text, quote=False)
 
@@ -1001,7 +1000,6 @@ def format_report_av(user_df, user, tg_user_name, max_len=None, max_note_len=Non
         header = f"<b>{esc(user)}</b>\n{now}\n\n"
 
     segments = [header]
-    trailer = " (...)"
 
     # sort tasks on due date
     def parse_due(x):
@@ -1029,14 +1027,21 @@ def format_report_av(user_df, user, tg_user_name, max_len=None, max_note_len=Non
                 note = note[:max_note_len - 3].rstrip() + " (...)"
             segments.append(f"<b>✲ Note:</b>\n{esc(note)}\n\n")
 
-    message = ""
+    # stitch into one or more messages
+    messages = []
+    current = ""
     for seg in segments:
-        if max_len and len(message) + len(seg) + len(trailer) > max_len:  # crop the whole message if it exceeds max_len
-            message += trailer
-            break
-        message += seg
+        # if adding this segment would bust the limit, start a new message
+        if max_len and len(current) + len(seg) > max_len:
+            messages.append(current.rstrip())
+            current = seg
+        else:
+            current += seg
 
-    return message
+    if current:
+        messages.append(current.rstrip())
+
+    return messages
 
 
 #GET TG USER

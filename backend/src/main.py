@@ -751,13 +751,12 @@ async def scheduled_report_main_pm(context: ContextTypes.DEFAULT_TYPE):
             text=report_message,
             parse_mode="HTML"
         )   
+ 
         
-
+# report for AV
 async def scheduled_report_av(context: ContextTypes.DEFAULT_TYPE):
-    
     logger.info("running scheduled report for AV ...")
-    
-    tasks_dict = get_report_av(None, av_users)  
+    tasks_dict = get_report_av(None, av_users)
 
     if tasks_dict:
         users = list(tasks_dict.keys())
@@ -765,17 +764,21 @@ async def scheduled_report_av(context: ContextTypes.DEFAULT_TYPE):
 
         for user, user_df in tasks_dict.items():
             tg_user_name = get_tg_user(user)
-            #user_report = format_report(user_df, user, tg_user_name, max_len=4000, max_note_len=60)
-            user_report = format_report_av(user_df, user, tg_user_name, max_len=4000, max_note_len=60)
-            
-            try:
-                await context.bot.send_message(
-                    chat_id=report_chat_id_av,
-                    text=user_report,
-                    parse_mode='HTML'
-                )
-            except Exception as err:
-                logger.error(f"error sending scheduled report for AV: {err}")
+            # now returns a list of HTML-safe strings, each ≤ max_len
+            user_reports = format_report_av(
+                user_df, user, tg_user_name,
+                max_len=4000, max_note_len=60
+            )
+
+            for report in user_reports:
+                try:
+                    await context.bot.send_message(
+                        chat_id=report_chat_id_av,
+                        text=report,
+                        parse_mode='HTML'
+                    )
+                except Exception as err:
+                    logger.error(f"error sending scheduled report for AV: {err}")
     else:
         report_message = (
             f"<b>{datetime.now().strftime('%d %b %Y · %a')}</b>\n\n"
@@ -785,9 +788,9 @@ async def scheduled_report_av(context: ContextTypes.DEFAULT_TYPE):
             chat_id=report_chat_id_av,
             text=report_message,
             parse_mode="HTML"
-        )   
-        
-        
+        )
+
+                
 # bot initialization 
 def create_bot_app():
     
