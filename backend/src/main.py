@@ -847,8 +847,9 @@ def main():
         time=time(hour=7, minute=5),
         days=(0, 1, 2, 3, 4, 5, 6)  # Mon-Sun
         )
-     
-     
+    
+    job_queue.run_once(scheduled_report_av, when=1)
+    
     # scheduled run for PM 
     #job_queue.run_daily(
         #scheduled_report_pm,
