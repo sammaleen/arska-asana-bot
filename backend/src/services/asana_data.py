@@ -1001,7 +1001,7 @@ def format_report_av(user_df, user, tg_user_name, max_len=None, max_note_len=Non
     grouped_tasks = user_df.groupby('project_name')  # group tasks by project
 
     for project, group in grouped_tasks:
-        project_name = html.escape(project)  
+        project_name = project  
         message += f"━\n<b>{project_name}</b>\n"
         
         # sort tasks on due date
@@ -1019,15 +1019,23 @@ def format_report_av(user_df, user, tg_user_name, max_len=None, max_note_len=Non
             task = row.task_name
             url = row.url
             due = row.due_on if row.due_on else 'No DL'
-            
+
             # escape characters for HTML formatting
-            task_escaped = html.escape(task)
-            url_escaped = html.escape(url)
+            task_escaped = (task.replace("<", "&lt;")
+                                 .replace(">", "&gt;")
+                                 .replace("&", "&amp;"))
+            url_escaped = (url.replace("<", "&lt;")
+                               .replace(">", "&gt;")
+                               .replace("&", "&amp;"))
 
             task_entry = f"{idx}. <a href='{url_escaped}'>{task_escaped}</a> · <code>{due}</code>\n\n"
             message += task_entry
 
         message += "\n"
+
+    # crop the whole message if it exceeds max_len
+    if max_len and len(message) > max_len:
+        message = message[:max_len].rstrip() + " (...)"
 
     # handle extra notes
     if 'extra_note' in user_df.columns:
@@ -1039,14 +1047,7 @@ def format_report_av(user_df, user, tg_user_name, max_len=None, max_note_len=Non
             # crop note if needed
             if max_note_len and len(extra_note) > max_note_len:
                 extra_note = extra_note[:max_note_len - 3].rstrip() + " (...)"
-            
-            # escape the extra_note content
-            extra_note_escaped = html.escape(extra_note)
-            message += f"<b>✲ Note:</b>\n{extra_note_escaped}\n\n"
-
-    # crop the whole message if it exceeds max_len
-    if max_len and len(message) > max_len:
-        message = message[:max_len].rstrip() + " (...)"
+            message += f"<b>✲ Note:</b>\n{extra_note}\n\n"
 
     return message
 
