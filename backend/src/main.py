@@ -317,7 +317,7 @@ async def report_command(update: Update, context: CallbackContext):
         return  
         
     # fetch tasks for report
-    tasks_dict = get_report(user_name, pm_users, ba_users)
+    tasks_dict = get_report(user_name, pm_users, ba_users, av_users)
     
     if tasks_dict:
         users = list(tasks_dict.keys())
@@ -551,7 +551,7 @@ async def scheduled_report(context: ContextTypes.DEFAULT_TYPE):
     
     logger.info("running scheduled report for TEST...")
     
-    tasks_dict = get_report(None, pm_users, ba_users)  
+    tasks_dict = get_report(None, pm_users, ba_users, av_users)  
 
     if tasks_dict:
         users = list(tasks_dict.keys())
@@ -586,7 +586,7 @@ async def scheduled_report_ar(context: ContextTypes.DEFAULT_TYPE):
     
     logger.info("running scheduled report for ARSKA ...")
     
-    tasks_dict = get_report(None, pm_users, ba_users)  
+    tasks_dict = get_report(None, pm_users, ba_users, av_users)  
 
     if tasks_dict:
         users = list(tasks_dict.keys())
@@ -690,7 +690,7 @@ async def scheduled_report_main(context: ContextTypes.DEFAULT_TYPE):
     
     logger.info("running scheduled report for ARSKA ...")
     
-    tasks_dict = get_report(None, pm_users, ba_users)  
+    tasks_dict = get_report(None, pm_users, ba_users, av_users)  
 
     if tasks_dict:
         users = list(tasks_dict.keys())
