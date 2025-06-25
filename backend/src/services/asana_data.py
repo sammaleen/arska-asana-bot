@@ -988,6 +988,7 @@ def format_report(user_df, user, tg_user_name, max_len=None, max_note_len=None):
 
     return message
 
+
 # FORMAT report for AV
 def format_report_av(user_df, user, tg_user_name, max_len=None, max_note_len=None):
     def esc(text):
@@ -1000,6 +1001,7 @@ def format_report_av(user_df, user, tg_user_name, max_len=None, max_note_len=Non
         header = f"<b>{esc(user)}</b>\n{now}\n\n"
 
     segments = [header]
+    trailer = " (...)"
 
     # sort tasks on due date
     def parse_due(x):
@@ -1008,7 +1010,13 @@ def format_report_av(user_df, user, tg_user_name, max_len=None, max_note_len=Non
         except:
             return datetime.max
 
-    for project, group in user_df.groupby('project_name'):  # group tasks by project
+    groups = list(user_df.groupby('project_name'))
+    normal_groups = [(p, g) for p, g in groups if p != 'No project']
+    no_project_groups = [(p, g) for p, g in groups if p == 'No project']
+    normal_groups.sort(key=lambda x: x[0] or '')
+    ordered_groups = normal_groups + no_project_groups
+
+    for project, group in ordered_groups:  # group tasks by project
         seg = f"━\n<b>{esc(project)}</b>\n"
         tasks = sorted(group.itertuples(), key=lambda row: parse_due(row.due_on))
         for idx, row in enumerate(tasks, start=1):  # reset idx, enumerate from 1
@@ -1027,17 +1035,14 @@ def format_report_av(user_df, user, tg_user_name, max_len=None, max_note_len=Non
                 note = note[:max_note_len - 3].rstrip() + " (...)"
             segments.append(f"<b>✲ Note:</b>\n{esc(note)}\n\n")
 
-    # stitch into one or more messages
     messages = []
     current = ""
     for seg in segments:
-        # if adding this segment would bust the limit, start a new message
         if max_len and len(current) + len(seg) > max_len:
             messages.append(current.rstrip())
             current = seg
         else:
             current += seg
-
     if current:
         messages.append(current.rstrip())
 
